@@ -125,9 +125,11 @@ int yylex(YYSTYPE *yylval, YYLTYPE *loc, Stmt *&res, long &errors,
     return token;
 }
 %}
+                                                    
                                                     // 语法规则
                                                     // $$: 代表左边的非终结符 用于构建AST 就是.h中定义的各种类
                                                     // $1: 代表右边第1个符号的值
+                                                    // Reduce: 规约: 把右边合并成左边 ---> token($x)作为输入匹配某个规则后 分配对象 合并成一个expr
 %%
 toplevel:
     stmt_list { res = $1; }                         // 整个输入是语句列表
@@ -157,17 +159,25 @@ expr:
     | expr '|' expr { $$ = new UnionExpr($1, $3); } // 并集
 
 bracket:                                            // 字符集
-    '[' bracket_items ']' { $$ = $2; }
-    | '[' '^' bracket_items ']' { $$ = $3; }
+    '[' bracket_items ']' {                         // bracket_items { $$ = $1;
+        $$ = $2;
+        printf("bracket [ ] \n");
+    }
+    | '[' '^' bracket_items ']' {
+        $$ = $3;
+        printf("bracket [^ ] \n");
+    }
 
 bracket_items:
     CHAR {
         $$ = new bitset<256>;
         $$->set($1);
+        printf("bracket_items CHAR\n");
     }
     | CHAR '-' CHAR {
         $$ = new bitset<256>;
         FOR(i, $1, $3 + 1) $$->set(i);
+        printf("bracket_items CHAR - CHAR\n");
     } 
     | bracket_items CHAR '-' CHAR {                 // 递归 // 前提是必需得有上面的基础作为起点/引子 才能递归
         $$ = $1;                                    // 把原来的 bitset 继承下来

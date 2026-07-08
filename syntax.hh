@@ -2,6 +2,8 @@
 
 #include <bitset>
 
+#define DEBUG_CLS 1
+
 template <class T>
 struct Visitor;
 
@@ -61,48 +63,88 @@ struct Expr : VisitableBase<Expr> {
 
 struct BracketExpr : Visitable<Expr, BracketExpr> {
     std::bitset<256> charset;
-    BracketExpr(std::bitset<256> *charset) : charset(*charset) {}
+    BracketExpr(std::bitset<256> *charset) :
+        charset(*charset) {
+#ifdef DEBUG_CLS 
+        printf("new BracketExpr\n");
+#endif
+    }
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
     char *ident;
-    CollapseExpr(char *ident) : ident(ident) {}
+    CollapseExpr(char *ident) :
+        ident(ident) {
+#ifdef DEBUG_CLS 
+        printf("new CollapseExpr\n");
+#endif
+    }
 };
 
 struct ClosureExpr : Visitable<Expr, ClosureExpr> {
     Expr *inner;
-    ClosureExpr(Expr *inner) : inner(inner) {}
+    ClosureExpr(Expr *inner) :
+        inner(inner) {
+#ifdef DEBUG_CLS 
+        printf("new ClosureExpr\n");
+#endif
+    }
     ~ClosureExpr() { delete inner; }
 };
 
 struct ConcatExpr : Visitable<Expr, ConcatExpr> {
     Expr *lhs, *rhs;
-    ConcatExpr(Expr *lhs, Expr *rhs) : lhs(lhs), rhs(rhs) {}
+    ConcatExpr(Expr *lhs, Expr *rhs) :
+        lhs(lhs), rhs(rhs) {
+#ifdef DEBUG_CLS 
+        printf("new ConcatExpr\n");
+#endif
+    }
     ~ConcatExpr() { delete lhs; delete rhs; }
 };
 
 struct DifferenceExpr : Visitable<Expr, DifferenceExpr> {
     Expr *lhs, *rhs;
-    DifferenceExpr(Expr *lhs, Expr *rhs) : lhs(lhs), rhs(rhs) {}
+    DifferenceExpr(Expr *lhs, Expr *rhs) :
+        lhs(lhs), rhs(rhs) {
+#ifdef DEBUG_CLS 
+        printf("new DifferenceExpr\n");
+#endif
+    }
     ~DifferenceExpr() { delete lhs; delete rhs; }
 
 };
 
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
     char *ident;
-    EmbedExpr(char *ident) : ident(ident) {}
+    EmbedExpr(char *ident) :
+        ident(ident) {
+#ifdef DEBUG_CLS 
+        printf("new EmbedExpr\n");
+#endif
+    }
     ~EmbedExpr() { free(ident); }
 };
 
 struct PlusExpr : Visitable<Expr, PlusExpr> {
     Expr *inner;
-    PlusExpr(Expr *inner) : inner(inner) {}
+    PlusExpr(Expr *inner) :
+        inner(inner) {
+#ifdef DEBUG_CLS 
+        printf("new PlusExpr\n");
+#endif
+    }
     ~PlusExpr() { delete inner; }
 };
 
 struct UnionExpr : Visitable<Expr, UnionExpr> {
     Expr *lhs, *rhs;
-    UnionExpr(Expr *lhs, Expr *rhs) : lhs(lhs), rhs(rhs) {}
+    UnionExpr(Expr *lhs, Expr *rhs) :
+        lhs(lhs), rhs(rhs) {
+#ifdef DEBUG_CLS 
+        printf("new UnionExpr\n");
+#endif
+    }
     ~UnionExpr() { delete lhs; delete rhs; }
 };
 
@@ -119,14 +161,24 @@ struct EmptyStmt : Visitable<Stmt, EmptyStmt> {};                   // 常用于
 struct AssignStmt : Visitable<Stmt, AssignStmt> {                   // x = 5 + 3;
     char *lhs;  // 左值（变量名）
     Expr *rhs;  // 右值（表达式
-    AssignStmt(char *lhs, Expr *rhs) : lhs(lhs), rhs(rhs) {}
+    AssignStmt(char *lhs, Expr *rhs) :
+        lhs(lhs), rhs(rhs) {
+#ifdef DEBUG_CLS 
+        printf("new AssignStmt\n");
+#endif
+    }
     ~AssignStmt() { free(lhs); delete rhs; }
 };
 
 struct InstantiationStmt : Visitable<Stmt, InstantiationStmt> {     // int x = 10
     char *lhs;
     Expr *rhs;
-    InstantiationStmt(char *lhs, Expr *rhs) : lhs(lhs), rhs(rhs) {}
+    InstantiationStmt(char *lhs, Expr *rhs) :
+        lhs(lhs), rhs(rhs) {
+#ifdef DEBUG_CLS 
+        printf("new InstantiationStmt\n");
+#endif
+    }
     ~InstantiationStmt() { free(lhs); delete rhs; }
 };
 

@@ -76,10 +76,16 @@ IS  (u|U|l|L)*
 
                                                     // Flex 和 Bison 需要“交接数据 要把匹配上的数据存放到 yylval 里
                                                     // flex 需要识别出 token 并返给bison 具体的数据类型
+                                                    // Flex 从左到右扫描输入，每次尝试(匹配所有规则)找到当前能匹配的最长 token，并且优先选择最先定义的规则。匹配成功后，才把这个 token 返回给 Bison。
 "."|"?"|"="|";"|","|":"|"|"|"+"|"-"|"*"|"/"|"%"|"\$"|"<"|">"|"&" { return yytext[0]; }
 "("|")" { return yytext[0]; }
 
-{L}({L}{D})* { yylval->string = strdup(yytext); return IDENT; } // 匹配abc123 存到string里并返回IDENT
+{L}({L}|{D})* {                                     // 匹配abc123 存到string里并返回IDENT
+    printf("DEBUG: IDENT recognized: '%s'\n", yytext);
+    yylval->string = strdup(yytext);
+    return IDENT;
+}
+
 
 [0-9]+ { yylval->integer = atol(yytext); return INTEGER; }
 

@@ -1,0 +1,64 @@
+#a = a;          # ok
+
+#ab = x;         # syntax error, unexpected IDENT, expecting '=' or ':' # 必须符合 lexer.l中 IDENT语法: {L}({L}{D})*
+#   DEBUG: IDENT recognized: 'ab'
+#   line 2 1-2: IDENT: ab   ---> $1  字符串类型
+#   DEBUG: IDENT recognized: 'x'
+#   line 2 6-6: IDENT: x
+#   
+#   new EmbedExpr           ---> 分配$3  expr类型
+#   new AssignStmt          ---> 分配$$  保存$1, $3
+#   line 11 13-13: YYEOF
+#   AssignStmt
+#     ab
+#     EmbedExpr
+#       x
+#   EmptyStmt
+
+
+#a = x + y;
+#   它被解析成了 a = (x) (y)   但其中 (x) 又被解析成了 PlusExpr
+#   a = x + y 错误地理解成了： a = (x+) concat y  即 + 只作用在了 x 身上
+#
+
+#x := c;         # ok
+
+#y = [a];        # syntax error, unexpected CHAR, expecting IDENT or '&' or '['  #expr没有提供CHAR
+#   lexer中提供了[]解析 获取得到char后 parser中找不到char  之所以匹配不上bracket是因为 它也写了[]
+#   lexer跟 bracket处理[]时 重复了
+
+#z = x | y | a;      # ok
+#   DEBUG: IDENT recognized: 'z'
+#   line 32 1-1: IDENT: z
+#   
+#   DEBUG: IDENT recognized: 'x'
+#   line 32 5-5: IDENT: x
+#   
+#   new EmbedExpr               ---> 先看到 x → 规约成 EmbedExpr("x")
+#                               ------> | 暂时不规约，继续等待（Shift）
+#   DEBUG: IDENT recognized: 'y'
+#   line 32 9-9: IDENT: y
+#   
+#   new EmbedExpr               ---> 看到 y → 规约成 EmbedExpr("y")
+#                               ------> 此时栈为 EmbedExpr("x")   '|'   EmbedExpr("y") 此时满足 expr '|' expr 这条规则 做第一次规约 即分配UnionExpr
+#   new UnionExpr
+#   DEBUG: IDENT recognized: 'a'
+#   line 32 13-13: IDENT: a
+#   
+#   new EmbedExpr               ---> ...
+#   new UnionExpr
+#   new AssignStmt
+#   line 36 13-13: YYEOF
+#   AssignStmt
+#     z
+#     UnionExpr
+#       UnionExpr
+#         EmbedExpr
+#           x
+#         EmbedExpr
+#           y
+#       EmbedExpr
+#         a
+#   EmptyStmt
+
+#a = 123456;    #暂不支持整形
