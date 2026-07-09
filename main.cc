@@ -177,6 +177,7 @@ int main(int argc, char **argv) {
 
     while ((r = fread(buf, 1, sizeof(buf), file)) > 0) {
         data += string(buf, buf + r);
+        if (r < sizeof(buf)) break;
     }
     LocationFile locfile("-", data);
     Stmt *toplevel = NULL;

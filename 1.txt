@@ -52,7 +52,7 @@
 #   AssignStmt
 #     z
 #     UnionExpr
-#       UnionExpr
+#       UnionExpr               ---> parser.y中定义的是 %left '|' 左结合
 #         EmbedExpr
 #           x
 #         EmbedExpr
@@ -61,4 +61,38 @@
 #         a
 #   EmptyStmt
 
-#a = 123456;    #暂不支持整形
+
+#a = b + c                      ---> 有bug
+#步骤,   动作,   栈的内容,      匹配的规则,     执行的动作,     说明
+# 1,    Shift,  IDENT(""a""),       -,              -,          移进 a
+# 2,    Shift,  IDENT =,            -,              -,          移进 =
+# 3,    Shift,  IDENT = IDENT("b"), -,              -,          移进 b
+# 4,    Reduce, IDENT = expr,   factor : IDENT, "new EmbedExpr(""b"")", b 被规约成 expr
+# 5,    Shift,  IDENT = expr+,      -,              -,          移进 +
+# 6,    Shift,  IDENT = expr + IDENT("c"),-,        -,          移进 c
+# 7,    Reduce, IDENT = expr + expr,factor : IDENT,"new EmbedExpr(""c"")",  c被规约成 expr
+# 8,    Reduce, IDENT = expr,   expr:expr '+' expr,"new PlusExpr(b, c)",    关键：匹配加法规则
+# 9,    Shift,  IDENT = expr,       -,              -,          移进 
+# 10,   Reduce, stmt,stmt : IDENT '=' union_expr,"new AssignStmt(""a"", PlusExpr)",匹配赋值语句
+# 11,   Reduce, stmt_list,stmt_list : stmt '\n'? stmt_list,构建链表,加入语句列表
+#   Shift = 拿积木（把 Token 放到栈上）
+#   Reduce = 搭积木（发现规则匹配，合并 + 创建对象）
+#   当 Bison 遇到 Lexer 返回的 + 时，如果匹配不上任何规则，会发生什么？
+#       Bison 不会立刻报错，而是会继续尝试，直到它确定无法继续解析，才会报 syntax error。
+#       假设 Lexer 返回了一个 + Token，Bison 会做以下事情：先尝试 Shift（移进） 把 + 放到栈上。 这是 Bison 的默认倾向（Shift 优先）。
+#       然后检查是否能 Reduce（规约） 看栈顶的符号是否能匹配某条规则。 例如是否能匹配 expr '+' expr 这条规则。 如果两者都不能做（即无法 Shift 也无法 Reduce）：
+#       Bison 就会报语法错误（syntax error）。 输出类似：unexpected '+', expecting ...
+
+#a = 123456             # 不支持整形
+#a = "abcdefghi"        # ok
+#export x = abc         # ok
+#import "file" as alias
+#import "file"
+#action name { a }      # ok
+#action name { { b } }  # faild
+
+
+identifier = [0-9]+ 
+    > log_start
+    @ log_end
+    % cleanup
