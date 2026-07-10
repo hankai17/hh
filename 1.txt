@@ -92,7 +92,13 @@
 #action name { { b } }  # faild
 
 
-identifier = [0-9]+ 
-    > log_start
-    @ log_end
-    % cleanup
+#identifier = [0-9]+        # 暂不会用
+#    > log_start
+#    @ log_end
+#    % cleanup
+
+#a = "abcdefghi"        # ok
+a = b + c
+
+
+

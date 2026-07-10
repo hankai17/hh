@@ -20,16 +20,19 @@ struct Visitable : Base {
     }
 };
 
+// Action
 struct Action;
 struct InlineAction;
 struct RefAction;
-struct ActionVisitor {
+
+template <>
+struct Visitor<Action> {
     virtual void visit(Action &) = 0;
     virtual void visit(InlineAction &) = 0;
     virtual void visit(RefAction &) = 0;
 };
-template <> struct Visitor<Action> : ActionVisitor {};
 
+// Expr
 struct Expr;
 struct BracketExpr;     // 字符集表达式: 最常见的字符类，比如正则中的 [a-z0-9] 这里的括号是[]
 struct ClosureExpr;     // 闭包表达式: 对应正则中的 * 重复操作 0次或多次
@@ -43,7 +46,8 @@ struct MaybeExpr;
 struct PlusExpr;        // 正闭包表达式: 对应正则中的 +
 struct UnionExpr;       // 并集表达式: 或关系 |
 
-struct ExprVisitor {
+template <>
+struct Visitor<Expr> {  // 1 visitor虚基类定义expr各接口
     virtual void visit(Expr &) = 0;
     virtual void visit(BracketExpr &) = 0;
     virtual void visit(ClosureExpr &) = 0;
@@ -58,24 +62,23 @@ struct ExprVisitor {
     virtual void visit(UnionExpr &) = 0;
 };
 
-template <> struct Visitor<Expr> : ExprVisitor {};  // 1 visitor虚基类定义expr各接口
-
+// Stmt
 struct Stmt;
 struct ActionStmt;
-struct AssignStmt;          // 赋值语句
+struct DefineStmt;          // 赋值语句
 struct EmptyStmt;           // 空语句
 struct ImportStmt;
-struct InstantiationStmt;   // 实例化 / 声明语句
-struct StmtVisitor {
+
+template <>
+struct Visitor<Stmt> {  // 同上 visitor虚基类定义stmt各接口
     virtual void visit(Stmt &) = 0;
     virtual void visit(ActionStmt &) = 0;
-    virtual void visit(AssignStmt &) = 0;
+    virtual void visit(DefineStmt &) = 0;
     virtual void visit(EmptyStmt &) = 0;
     virtual void visit(ImportStmt &) = 0;
-    virtual void visit(InstantiationStmt &) = 0;
 };
 
-template <> struct Visitor<Stmt> : StmtVisitor {};  // 同上 visitor虚基类定义stmt各接口
+///////////////////////////////////////////////////// CRTP
 
 // Action
 struct Action: VisitableBase<Action> {
@@ -127,17 +130,17 @@ struct BracketExpr : Visitable<Expr, BracketExpr> { // 2.1 CRTP 但还没有实�
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
-    char *module;
+    char *qualified;
     char *ident;
-    CollapseExpr(char *module, char *ident) :
-        module(module),
+    CollapseExpr(char *qualified, char *ident) :
+        qualified(qualified),
         ident(ident) {
 #ifdef DEBUG_CLS 
         printf("new CollapseExpr\n");
 #endif
     }
     ~CollapseExpr() {
-        free(module);
+        free(qualified);
         free(ident);
     }
 };
@@ -182,17 +185,17 @@ struct DotExpr : Visitable<Expr, DotExpr> {
 
 
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
-    char *module;
+    char *qualified;
     char *ident;
-    EmbedExpr(char *module, char *ident) :
-        module(module),
+    EmbedExpr(char *qualified, char *ident) :
+        qualified(qualified),
         ident(ident) {
 #ifdef DEBUG_CLS 
         printf("new EmbedExpr\n");
 #endif
     }
     ~EmbedExpr() {
-        free(module);
+        free(qualified);
         free(ident);
     }
 };
@@ -271,19 +274,19 @@ struct ActionStmt : Visitable<Stmt, ActionStmt> {
     }
 };
 
-struct AssignStmt : Visitable<Stmt, AssignStmt> {                   // x = 5 + 3;
+struct DefineStmt : Visitable<Stmt, DefineStmt> {                   // x = 5 + 3;
     bool export_;
     char *lhs;  // 左值（变量名）
     Expr *rhs;  // 右值（表达式
-    AssignStmt(bool export_, char *lhs, Expr *rhs) :
+    DefineStmt(bool export_, char *lhs, Expr *rhs) :
         export_(export_),
         lhs(lhs),
         rhs(rhs) {
 #ifdef DEBUG_CLS 
-        printf("new AssignStmt\n");
+        printf("new DefineStmt\n");
 #endif
     }
-    ~AssignStmt() {
+    ~DefineStmt() {
         free(lhs);
         delete rhs;
     }
@@ -303,18 +306,6 @@ struct ImportStmt : Visitable<Stmt, ImportStmt> {
         free(filename);
         free(qualified);
     }
-};
-
-struct InstantiationStmt : Visitable<Stmt, InstantiationStmt> {     // int x = 10
-    char *lhs;
-    Expr *rhs;
-    InstantiationStmt(char *lhs, Expr *rhs) :
-        lhs(lhs), rhs(rhs) {
-#ifdef DEBUG_CLS 
-        printf("new InstantiationStmt\n");
-#endif
-    }
-    ~InstantiationStmt() { free(lhs); delete rhs; }
 };
 
 void stmt_free(Stmt *stmt);
@@ -347,8 +338,8 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         stmt.accept(*this);
     }
 
-    void visit(AssignStmt &stmt) override {
-        printf("%*s%s\n", 2 * depth, "", "AssignStmt");
+    void visit(DefineStmt &stmt) override {
+        printf("%*s%s\n", 2 * depth, "", "DefineStmt");
         depth++;
         printf("%*s%s\n", 2 * depth, "", stmt.lhs);
         visit(*stmt.rhs);
@@ -363,10 +354,6 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
     void visit(EmptyStmt &stmt) override {
         printf("%*s%s\n", 2 * depth, "", "EmptyStmt");
-    }
-
-    void visit(InstantiationStmt &stmt) override {
-        printf("%*s%s\n", 2 * depth, "", "InstantiationStmt");
     }
 
     void visit(ImportStmt &stmt) override {
@@ -408,8 +395,8 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     void visit(CollapseExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "CollapseExpr");
         printf("%*s\n", 2 * (depth + 1), "");
-        if (expr.module) {
-            printf("%s.%s\n", expr.module, expr.ident);
+        if (expr.qualified) {
+            printf("%s.%s\n", expr.qualified, expr.ident);
         } else {
             printf("%s\n", expr.ident);
         }
@@ -437,9 +424,9 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
     void visit(EmbedExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "EmbedExpr");
-        printf("%*s\n", 2 * (depth + 1), "");
-        if (expr.module) {
-            printf("%s.%s\n", expr.module, expr.ident);
+        printf("%*s", 2 * (depth + 1), "");
+        if (expr.qualified) {
+            printf("%s.%s\n", expr.qualified, expr.ident);
         } else {
             printf("%s\n", expr.ident);
         }
@@ -471,5 +458,41 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         expr.rhs->accept(*this);
         depth--;
     }
+};
+
+struct PreorderStmtVisitor : Visitor<Stmt> {
+    void visit(Stmt &stmt) override {
+        stmt.accept(*this);
+    }
+
+    void visit(ActionStmt &stmt) override {}
+    void visit(DefineStmt &stmt) override {}
+    void visit(EmptyStmt &stmt) override {}
+    void visit(ImportStmt &stmt) override {}
+};
+
+struct PreorderActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
+    void visit(Action &action) override { action.accept(*this); }
+    void visit(InlineAction &action) override {}
+    void visit(RefAction &action) override {}
+
+    void visit(Expr &expr) override { expr.accept(*this); }
+    void visit(BracketExpr &expr) override {}
+    void visit(ClosureExpr &expr) override {}
+    void visit(CollapseExpr &expr) override {}
+    void visit(ConcatExpr &expr) override {}
+    void visit(DifferenceExpr &expr) override {}
+    void visit(DotExpr &expr) override {}
+    void visit(EmbedExpr &expr) override {}
+    void visit(LiteralExpr &expr) override {}
+    void visit(MaybeExpr &expr) override {}
+    void visit(PlusExpr &expr) override {}
+    void visit(UnionExpr &expr) override {}
+
+    void visit(Stmt &stmt) override { stmt.accept(*this); }
+    void visit(ActionStmt &stmt) override {}
+    void visit(DefineStmt &stmt) override { stmt.rhs->accept(*this); }
+    void visit(EmptyStmt &stmt) override {}
+    void visit(ImportStmt &stmt) override {}
 };
 

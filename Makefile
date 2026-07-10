@@ -1,7 +1,7 @@
 #CXXFLAGS := -g3 -std=c++1y -fsanitize=undefined,address
 CXXFLAGS := -g -O0 -std=c++1y -fsanitize=undefined,address
 LDFLAGS  := -fsanitize=undefined,address
-O := lexer_helper.o lexer.o location.o main.o parser.o syntax.o
+O := common.o lexer_helper.o lexer.o location.o main.o parser.o syntax.o loader.o option.o
 
 all: hh
 
@@ -10,7 +10,7 @@ hh: $O
 
 parser.o: lexer.hh
 lexer.o: parser.hh
-main.o: parser.hh syntax.hh
+main.o: parser.hh syntax.hh common.hh option.hh
 
 lexer.cc lexer.hh: lexer.l
 	flex --header-file=lexer.hh -o lexer.cc $<
