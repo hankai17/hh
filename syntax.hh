@@ -47,7 +47,7 @@ struct PlusExpr;        // 正闭包表达式: 对应正则中的 +
 struct UnionExpr;       // 并集表达式: 或关系 |
 
 template <>
-struct Visitor<Expr> {  // 1 visitor虚基类定义expr各接口
+struct Visitor<Expr> {                              // 1 visitor虚基类定义expr各接口
     virtual void visit(Expr &) = 0;
     virtual void visit(BracketExpr &) = 0;
     virtual void visit(ClosureExpr &) = 0;
@@ -70,7 +70,7 @@ struct EmptyStmt;           // 空语句
 struct ImportStmt;
 
 template <>
-struct Visitor<Stmt> {  // 同上 visitor虚基类定义stmt各接口
+struct Visitor<Stmt> {                              // 同上 visitor虚基类定义stmt各接口
     virtual void visit(Stmt &) = 0;
     virtual void visit(ActionStmt &) = 0;
     virtual void visit(DefineStmt &) = 0;
@@ -120,6 +120,7 @@ struct Expr : VisitableBase<Expr> {                 // 2 Expr 白嫖accept接口
 
 struct BracketExpr : Visitable<Expr, BracketExpr> { // 2.1 CRTP 但还没有实现expr中 该类的visit接口
     std::bitset<256> charset;
+
     BracketExpr(std::bitset<256> *in_charset) :
         charset(*in_charset) {
         delete in_charset;
@@ -132,13 +133,16 @@ struct BracketExpr : Visitable<Expr, BracketExpr> { // 2.1 CRTP 但还没有实�
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
     char *qualified;
     char *ident;
+
     CollapseExpr(char *qualified, char *ident) :
         qualified(qualified),
         ident(ident) {
 #ifdef DEBUG_CLS 
-        printf("new CollapseExpr\n");
+        printf("new CollapseExpr: qualified: %s, ident: %s\n",
+                qualified, ident);
 #endif
     }
+
     ~CollapseExpr() {
         free(qualified);
         free(ident);
@@ -147,34 +151,40 @@ struct CollapseExpr : Visitable<Expr, CollapseExpr> {
 
 struct ClosureExpr : Visitable<Expr, ClosureExpr> {
     Expr *inner;
+
     ClosureExpr(Expr *inner) :
         inner(inner) {
 #ifdef DEBUG_CLS 
         printf("new ClosureExpr\n");
 #endif
     }
+
     ~ClosureExpr() { delete inner; }
 };
 
 struct ConcatExpr : Visitable<Expr, ConcatExpr> {
     Expr *lhs, *rhs;
+
     ConcatExpr(Expr *lhs, Expr *rhs) :
         lhs(lhs), rhs(rhs) {
 #ifdef DEBUG_CLS 
         printf("new ConcatExpr\n");
 #endif
     }
+
     ~ConcatExpr() { delete lhs; delete rhs; }
 };
 
 struct DifferenceExpr : Visitable<Expr, DifferenceExpr> {
     Expr *lhs, *rhs;
+
     DifferenceExpr(Expr *lhs, Expr *rhs) :
         lhs(lhs), rhs(rhs) {
 #ifdef DEBUG_CLS 
         printf("new DifferenceExpr\n");
 #endif
     }
+
     ~DifferenceExpr() { delete lhs; delete rhs; }
 
 };
@@ -187,13 +197,16 @@ struct DotExpr : Visitable<Expr, DotExpr> {
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
     char *qualified;
     char *ident;
+
     EmbedExpr(char *qualified, char *ident) :
         qualified(qualified),
         ident(ident) {
 #ifdef DEBUG_CLS 
-        printf("new EmbedExpr\n");
+        printf("new EmbedExpr: qualified: %s, ident: %s\n",
+                qualified, ident);
 #endif
     }
+
     ~EmbedExpr() {
         free(qualified);
         free(ident);
@@ -202,12 +215,15 @@ struct EmbedExpr : Visitable<Expr, EmbedExpr> {
 
 struct LiteralExpr : Visitable<Expr, LiteralExpr> {
     char *literal;
+
     LiteralExpr(char *literal) :
         literal(literal) {
 #ifdef DEBUG_CLS 
-        printf("new LiteralExpr\n");
+        printf("new LiteralExpr: literal: %s\n",
+                literal);
 #endif
     }
+
     ~LiteralExpr() {
         free(literal);
     }
@@ -215,6 +231,7 @@ struct LiteralExpr : Visitable<Expr, LiteralExpr> {
 
 struct MaybeExpr : Visitable<Expr, MaybeExpr> {
     Expr *inner;
+
     MaybeExpr(Expr *inner) :
         inner(inner) {
 #ifdef DEBUG_CLS 
@@ -228,6 +245,7 @@ struct MaybeExpr : Visitable<Expr, MaybeExpr> {
 
 struct PlusExpr : Visitable<Expr, PlusExpr> {
     Expr *inner;
+
     PlusExpr(Expr *inner) :
         inner(inner) {
 #ifdef DEBUG_CLS 
@@ -239,6 +257,7 @@ struct PlusExpr : Visitable<Expr, PlusExpr> {
 
 struct UnionExpr : Visitable<Expr, UnionExpr> {
     Expr *lhs, *rhs;
+
     UnionExpr(Expr *lhs, Expr *rhs) :
         lhs(lhs), rhs(rhs) {
 #ifdef DEBUG_CLS 
@@ -261,13 +280,16 @@ struct EmptyStmt : Visitable<Stmt, EmptyStmt> {};                   // 常用于
 struct ActionStmt : Visitable<Stmt, ActionStmt> {
     char *ident;
     char *code;
+
     ActionStmt(char *ident, char *code) :
         ident(ident),
         code(code) {
 #ifdef DEBUG_CLS 
-        printf("new ActionStmt\n");
+        printf("new ActionStmt: ident: %s, code: %s\n",
+                ident, code);
 #endif
     }
+
     ~ActionStmt() {
         free(ident);
         free(code);
@@ -278,14 +300,17 @@ struct DefineStmt : Visitable<Stmt, DefineStmt> {                   // x = 5 + 3
     bool export_;
     char *lhs;  // 左值（变量名）
     Expr *rhs;  // 右值（表达式
+
     DefineStmt(bool export_, char *lhs, Expr *rhs) :
         export_(export_),
         lhs(lhs),
         rhs(rhs) {
 #ifdef DEBUG_CLS 
-        printf("new DefineStmt\n");
+        printf("new DefineStmt: lhs: %s, rhs: TODO\n",
+                lhs);
 #endif
     }
+
     ~DefineStmt() {
         free(lhs);
         delete rhs;
@@ -295,13 +320,16 @@ struct DefineStmt : Visitable<Stmt, DefineStmt> {                   // x = 5 + 3
 struct ImportStmt : Visitable<Stmt, ImportStmt> {
     char *filename;
     char *qualified;
+
     ImportStmt(char *filename, char *qualified) :
         filename(filename),
         qualified(qualified) {
 #ifdef DEBUG_CLS 
-        printf("new ImportStmt\n");
+        printf("new ImportStmt: filename: %s, qualified: %s\n",
+                filename, qualified);
 #endif
     }
+
     ~ImportStmt() {
         free(filename);
         free(qualified);
@@ -465,34 +493,159 @@ struct PreorderStmtVisitor : Visitor<Stmt> {
         stmt.accept(*this);
     }
 
-    void visit(ActionStmt &stmt) override {}
-    void visit(DefineStmt &stmt) override {}
-    void visit(EmptyStmt &stmt) override {}
-    void visit(ImportStmt &stmt) override {}
+    void visit(ActionStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderStmtVisitor ActionStmt\n");
+#endif
+    }
+
+    void visit(DefineStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderStmtVisitor DefineStmt\n");
+#endif
+    }
+
+    void visit(EmptyStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderStmtVisitor EmptyStmt\n");
+#endif
+    }
+
+    void visit(ImportStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderStmtVisitor ImportStmt\n");
+#endif
+    }
 };
 
 struct PreorderActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
-    void visit(Action &action) override { action.accept(*this); }
-    void visit(InlineAction &action) override {}
-    void visit(RefAction &action) override {}
+    // action
+    void visit(Action &action) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor Action\n");
+#endif
+        action.accept(*this);
+    }
 
-    void visit(Expr &expr) override { expr.accept(*this); }
-    void visit(BracketExpr &expr) override {}
-    void visit(ClosureExpr &expr) override {}
-    void visit(CollapseExpr &expr) override {}
-    void visit(ConcatExpr &expr) override {}
-    void visit(DifferenceExpr &expr) override {}
-    void visit(DotExpr &expr) override {}
-    void visit(EmbedExpr &expr) override {}
-    void visit(LiteralExpr &expr) override {}
-    void visit(MaybeExpr &expr) override {}
-    void visit(PlusExpr &expr) override {}
-    void visit(UnionExpr &expr) override {}
+    void visit(InlineAction &action) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor InlineAction\n");
+#endif
+    }
 
-    void visit(Stmt &stmt) override { stmt.accept(*this); }
-    void visit(ActionStmt &stmt) override {}
-    void visit(DefineStmt &stmt) override { stmt.rhs->accept(*this); }
-    void visit(EmptyStmt &stmt) override {}
-    void visit(ImportStmt &stmt) override {}
+    void visit(RefAction &action) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor RefAction\n");
+#endif
+    }
+
+    // expr
+    void visit(Expr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor Expr\n");
+#endif
+        expr.accept(*this);
+    }
+
+    void visit(BracketExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor BracketExpr\n");
+#endif
+    }
+
+    void visit(ClosureExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor ClosureExpr\n");
+#endif
+    }
+
+    void visit(CollapseExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor CollapseExpr\n");
+#endif
+    }
+
+    void visit(ConcatExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor ConcatExpr\n");
+#endif
+    }
+
+    void visit(DifferenceExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor DifferenceExpr\n");
+#endif
+    }
+
+    void visit(DotExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor DotExpr\n");
+#endif
+    }
+
+    void visit(EmbedExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor EmbedExpr\n");
+#endif
+    }
+
+    void visit(LiteralExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor LiteralExpr\n");
+#endif
+    }
+
+    void visit(MaybeExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor MaybeExpr\n");
+#endif
+    }
+
+    void visit(PlusExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor PlusExpr\n");
+#endif
+    }
+
+    void visit(UnionExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor UnionExpr\n");
+#endif
+    }
+
+
+    // stmt
+    void visit(Stmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor Stmt\n");
+#endif
+        stmt.accept(*this);
+    }
+
+    void visit(ActionStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor ActionStmt\n");
+#endif
+    }
+
+    void visit(DefineStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor DefineStmt\n");
+#endif
+        stmt.rhs->accept(*this);
+    }
+
+    void visit(EmptyStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor EmptyStmt\n");
+#endif
+    }
+
+    void visit(ImportStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor ImportStmt\n");
+#endif
+    }
+
 };
 

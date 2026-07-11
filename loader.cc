@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <iostream>
 
 static std::map<std::pair<dev_t, ino_t>, Module> inode2module;
 
@@ -47,22 +48,27 @@ struct ModuleImportDef : PreorderStmtVisitor {
         n_errors(n_errors) {
     }
 
-    void visit(ActionStmt &stmt)  override {
+    void visit(ActionStmt &stmt) override {
+        std::cout << "visit ModuleImportDef:PreorderStmtVisitor ActionStmt\n" << std::endl;
         if (mod.named_action.count(stmt.ident)) {
             err_msg("Redefined '%s'\n", stmt.ident);
         }
         mod.named_action[stmt.ident] = stmt.code;
     }
 
-    void visit(DefineStmt &stmt) override {
+    void visit(DefineStmt &stmt) override {                             // 1.3 接普通语句
+        std::cout << "visit ModuleImportDef:PreorderStmtVisitor DefineStmt\n" << std::endl;
         mod.defined.insert(stmt.lhs);
     }
 
-    void visit(ImportStmt &stmt) override {
-        Module *m = load_module(stmt.filename);
-        if (stmt.qualified) {
-            mod.qualified_import[stmt.qualified] = m;
-        } else if (std::count(ALL(mod.unqualified_import), m) == 0) {
+    void visit(ImportStmt &stmt) override {                             // 1.3 接import语句
+        std::cout << "visit ModuleImportDef:PreorderStmtVisitor ImportStmt\n" << std::endl;
+        std::cout << "before load_module...\n" << std::endl;
+        Module *m = load_module(stmt.filename);                         // 1.3.1 边消费边生产模型
+        std::cout << "after load_module...\n" << std::endl;
+        if (stmt.qualified) {                                           // 1.3.2 加载新文件 保存到当前mod里
+            mod.qualified_import[stmt.qualified] = m;                   // 1.3.3 有限定符 保存到当前mod的qualified_import里 eg: import file as f
+        } else if (std::count(ALL(mod.unqualified_import), m) == 0) {   // 1.3.3 无限定符 保存到当前mod的unqualified_import里 eg: import file
             mod.unqualified_import.push_back(m);
         }
     }
@@ -77,13 +83,17 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
         n_errors(n_errors) {
     }
     
-    void visit(BracketExpr &expr) override {}
+    void visit(BracketExpr &expr) override {
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor BracketExpr\n" << std::endl;
+    }
 
     void visit(ClosureExpr &expr) override {
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor ClosureExpr\n" << std::endl;
         expr.inner->accept(*this);
     }
 
     void visit(CollapseExpr &expr) override {
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor CollapseExpr\n" << std::endl;
         if (expr.qualified) {
             if (!mod.qualified_import.count(expr.qualified)) {
                 err_msg("%s: Unknown module '%s'\n",
@@ -110,7 +120,8 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     }
 
     void visit(EmbedExpr &expr) override {
-        if (expr.qualified) {
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor EmbedExpr\n" << std::endl;
+        if (expr.qualified) {                                   // 限定符场景
             if (!mod.qualified_import.count(expr.qualified)) {
                 err_msg("%s: Unknown module '%s'\n",
                     mod.filename.c_str(), expr.qualified);
@@ -122,9 +133,9 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
                 //mod.locfile.locate();
                 //err_msg("Redefined '%s'\n", stmt.ident);
             }
-        } else {
-            long c = mod.defined.count(expr.ident);
-            for (auto &it : mod.unqualified_import) {
+        } else {                                                // 无限定符场景 或 一般场景
+            long c = mod.defined.count(expr.ident);             // 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
+            for (auto &it : mod.unqualified_import) {           // 无限定符场景
                 c += it->defined.count(expr.ident);
             }
             if (!c) {
@@ -136,14 +147,17 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     }
 
     void visit(MaybeExpr &expr) override {
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor MaybeExpr\n" << std::endl;
         expr.inner->accept(*this);
     }
 
     void visit(PlusExpr &expr) override {
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor PlusExpr\n" << std::endl;
         expr.inner->accept(*this);
     }
 
     void visit(UnionExpr &expr) override {
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr\n" << std::endl;
         expr.lhs->accept(*this);
         expr.rhs->accept(*this);
     }
@@ -194,29 +208,29 @@ Module *load_module(const char *filename) {
 
     Module &mod = inode2module[inode];
     mod.filename = filename;
-    mod.toplevel = toplevel;
+    mod.toplevel = toplevel;                                // 1.1 toplevel 可能是 parser.y 中 stmt: 下 定义的那三种stmt
     return &mod;
 }
 
 void load(const char *filename) {
     long n_errors = 0;
 
-    load_module(filename);
+    load_module(filename);                                  // 1 加载首文件 构建AST
 
     if (!n_errors) {
-        for (auto &it : inode2module) {
+        for (auto &it : inode2module) {                     // 1.2 ModuleImportDef 能接所有语句
             Module &mod = it.second;
             ModuleImportDef p { mod, n_errors };
             for (Stmt *s = mod.toplevel; s; s= s->next) {
-                s->accept(p);
+                s->accept(p);                               // 边消费 边生产
             }
         }
     }
 
     if (!n_errors) {
         for (auto &it : inode2module) {
-            Module &mod = it.second;
-            ModuleUse p { mod, n_errors };
+            Module &mod = it.second;                        // 这里mod 是"全局的" 意思是 ModuleImportDef ModuleUse 公用同一个
+            ModuleUse p { mod, n_errors };                  // 2 遍历表达式 既遍历stmt等号右边的expr
             for (Stmt *s = mod.toplevel; s; s= s->next) {
                 s->accept(p);
             }

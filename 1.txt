@@ -98,7 +98,30 @@
 #    % cleanup
 
 #a = "abcdefghi"        # ok
-a = b + c
+#a = b + c              # 语法仍有错
+
+#import "2.txt" as alias2    # alias2为限定符 eg: std::vector std就是限定符
+#a = "a123"
+#a = a*
+#a = a+
+#a = a?
+#a = []                 # 不支持
+
+#str = "123"
+#c = str                 # str是EmbedExpr # 需要检查str是否存在
+
+#b = "123aa"
+#a = &b
+
+
+import "3.txt" as alias3
+c = alias3::a3
+d = alias3::b3
+
+
+
+
+
 
 
 
