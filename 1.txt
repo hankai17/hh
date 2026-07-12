@@ -114,11 +114,12 @@
 #a = &b
 
 
-import "3.txt" as alias3
-c = alias3::a3
-d = alias3::b3
+#import "3.txt" as alias3
+#c = alias3::a3
+#d = alias3::b3
 
-
+import "3.txt"
+c = b3
 
 
 
