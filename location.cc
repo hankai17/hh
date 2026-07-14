@@ -20,7 +20,7 @@ LocationFile::LocationFile(const std::string &filename,
     linemap[line] = data.size();
 }
 
-void LocationFile::locate(const Location &loc,
+void LocationFile::locate(const Location &loc,  // TODO
         const char *fmt, ...) const {
     va_list va;
     va_start(va, fmt);

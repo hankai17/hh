@@ -51,7 +51,8 @@ struct ModuleImportDef : PreorderStmtVisitor {
     void visit(ActionStmt &stmt) override {
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor ActionStmt\n" << std::endl;
         if (mod.named_action.count(stmt.ident)) {
-            err_msg("Redefined '%s'\n", stmt.ident);
+            n_errors++;
+            mo.locfile.locate(stmt.loc, "Redefined '%s'\n", stmt.ident);
         }
         mod.named_action[stmt.ident] = stmt.code;
     }
@@ -64,8 +65,14 @@ struct ModuleImportDef : PreorderStmtVisitor {
     void visit(ImportStmt &stmt) override {                             // 1.3 接import语句
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor ImportStmt\n" << std::endl;
         std::cout << "before load_module...\n" << std::endl;
-        Module *m = load_module(stmt.filename);                         // 1.3.1 边消费边生产模型
+        Module *m = load_module(n_errors, stmt.filename);                         // 1.3.1 边消费边生产模型
         std::cout << "after load_module...\n" << std::endl;
+        if (!m) {
+            n_errors++;
+            mo.locfile.locate(stmt.loc, "'%s' : %s", stmt.filename,
+                    errno ? strerror(errno) : "parse error");
+            return;
+        }
         if (stmt.qualified) {                                           // 1.3.2 加载新文件 保存到当前mod里
             mod.qualified_import[stmt.qualified] = m;                   // 1.3.3 有限定符 保存到当前mod的qualified_import里 eg: import file as f
         } else if (std::count(ALL(mod.unqualified_import), m) == 0) {   // 1.3.3 无限定符 保存到当前mod的unqualified_import里 eg: import file
@@ -96,15 +103,11 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor CollapseExpr\n" << std::endl;
         if (expr.qualified) {
             if (!mod.qualified_import.count(expr.qualified)) {
-                err_msg("%s: Unknown module '%s'\n",
-                    mod.filename.c_str(), expr.qualified);
+                n_errors++;
+                mo.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
             } else if (!mod.qualified_import[expr.qualified]->defined.count(expr.ident)) {
-                err_msg("%s: '%s::%s': Undefined \n",
-                    mod.filename.c_str(),
-                    expr.qualified,
-                    expr.ident);
-                //mod.locfile.locate();
-                //err_msg("Redefined '%s'\n", stmt.ident);
+                n_errors++;
+                mo.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
             }
         } else {
             long c = mod.defined.count(expr.ident);
@@ -112,9 +115,8 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
                 c += it->defined.count(expr.ident);
             }
             if (!c) {
-                err_msg("%s: '%s' Undefined\n",
-                    mod.filename.c_str(),
-                    expr.ident);
+                n_errors++;
+                mo.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
             }
         }
     }
@@ -123,15 +125,11 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor EmbedExpr\n" << std::endl;
         if (expr.qualified) {                                   // 限定符场景
             if (!mod.qualified_import.count(expr.qualified)) {
-                err_msg("%s: Unknown module '%s'\n",
-                    mod.filename.c_str(), expr.qualified);
+                n_errors++;
+                mo.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
             } else if (!mod.qualified_import[expr.qualified]->defined.count(expr.ident)) {
-                err_msg("%s: '%s::%s': Undefined \n",
-                    mod.filename.c_str(),
-                    expr.qualified,
-                    expr.ident);
-                //mod.locfile.locate();
-                //err_msg("Redefined '%s'\n", stmt.ident);
+                n_errors++;
+                mo.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
             }
         } else {                                                // 无限定符场景 或 一般场景
             long c = mod.defined.count(expr.ident);             // 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
@@ -139,9 +137,8 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
                 c += it->defined.count(expr.ident);
             }
             if (!c) {
-                err_msg("%s: '%s' Undefined\n",
-                    mod.filename.c_str(),
-                    expr.ident);
+                n_errors++;
+                mo.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
             }
         }
     }
@@ -163,15 +160,14 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     }
 };
 
-Module *load_module(const char *filename) {
+Module *load_module(long &n_errors, const char *filename) {
     std::pair<dev_t, ino_t> inode {0, 0};
-    FILE *file = filename ? fopen(filename, "r") : stdin;
-
+    FILE *file = strcmp(filename, "-") ? fopen(filename, "r") : stdin;
     if (!file) {
-        err_exit(EX_OSFILE, "fopen '%s'", filename);
+        return NULL;
     }
 
-    if (filename) {
+    if (file != stdin) {
         struct stat st;
         if (fstat(fileno(file), &st) < 0) {
             err_exit(EX_OSFILE, "fstat  '%s'", filename);
@@ -183,7 +179,7 @@ Module *load_module(const char *filename) {
         return &inode2module[inode];
     }
 
-    std::string module { filename ? filename : "main" };
+    std::string module { file != stdin ? filename : "main" };
     std::string::size_type t = module.find('.');
 
     if (t != std::string::npos) {
@@ -199,23 +195,31 @@ Module *load_module(const char *filename) {
         if (r < sizeof(buf)) break;
     }
 
-    LocationFile locfile("-", data);
+    if (data.empty() || data.back() != '\n') {
+        data.push_back('\n');
+    }
+
+    LocationFile locfile(filename, data);
     Stmt *toplevel = NULL;
     long errors = parse(locfile, toplevel);
     if (!toplevel) {
-        err_exit(EX_DATAERR, "Failed to laod '%s'", filename);
+        n_errors += errors;
+        return NULL;
     }
 
     Module &mod = inode2module[inode];
+    mod.locfile = locfile;
     mod.filename = filename;
     mod.toplevel = toplevel;                                // 1.1 toplevel 可能是 parser.y 中 stmt: 下 定义的那三种stmt
     return &mod;
 }
 
-void load(const char *filename) {
+long load(const char *filename) {
     long n_errors = 0;
 
-    load_module(filename);                                  // 1 加载首文件 构建AST
+    if (!load_module(n_errors, filename)) {                 // 1 加载首文件 构建AST
+        return n_errors;
+    }
 
     if (!n_errors) {
         for (auto &it : inode2module) {                     // 1.2 ModuleImportDef 能接所有语句
@@ -253,6 +257,8 @@ void load(const char *filename) {
             }
         }
     }
+
+    return n_errors;
 }
 
 void unload_all() {
