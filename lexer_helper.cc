@@ -1,5 +1,8 @@
 #include "common.hh"
 
+#define _GNU_SOURCE
+#include <stdio.h>
+
 using namespace std;
 
 char *aprintf(const char *fmt, ...)

@@ -11,10 +11,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <iostream>
+#include <string.h>
 
 static std::map<std::pair<dev_t, ino_t>, Module> inode2module;
 
-void load(const char *filename);
+long load(const char *filename);
 Module *load_module(const char *filename);
 void unload_all();
 
@@ -52,7 +53,7 @@ struct ModuleImportDef : PreorderStmtVisitor {
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor ActionStmt\n" << std::endl;
         if (mod.named_action.count(stmt.ident)) {
             n_errors++;
-            mo.locfile.locate(stmt.loc, "Redefined '%s'\n", stmt.ident);
+            mod.locfile.locate(stmt.loc, "Redefined '%s'\n", stmt.ident);
         }
         mod.named_action[stmt.ident] = stmt.code;
     }
@@ -69,7 +70,7 @@ struct ModuleImportDef : PreorderStmtVisitor {
         std::cout << "after load_module...\n" << std::endl;
         if (!m) {
             n_errors++;
-            mo.locfile.locate(stmt.loc, "'%s' : %s", stmt.filename,
+            mod.locfile.locate(stmt.loc, "'%s' : %s", stmt.filename,
                     errno ? strerror(errno) : "parse error");
             return;
         }
@@ -104,10 +105,10 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
         if (expr.qualified) {
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
-                mo.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
+                mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
             } else if (!mod.qualified_import[expr.qualified]->defined.count(expr.ident)) {
                 n_errors++;
-                mo.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
+                mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
             }
         } else {
             long c = mod.defined.count(expr.ident);
@@ -116,7 +117,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
             }
             if (!c) {
                 n_errors++;
-                mo.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
+                mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
             }
         }
     }
@@ -126,10 +127,10 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
         if (expr.qualified) {                                   // 限定符场景
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
-                mo.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
+                mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
             } else if (!mod.qualified_import[expr.qualified]->defined.count(expr.ident)) {
                 n_errors++;
-                mo.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
+                mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
             }
         } else {                                                // 无限定符场景 或 一般场景
             long c = mod.defined.count(expr.ident);             // 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
@@ -138,7 +139,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
             }
             if (!c) {
                 n_errors++;
-                mo.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
+                mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
             }
         }
     }
@@ -191,7 +192,7 @@ Module *load_module(long &n_errors, const char *filename) {
     std::string data;
 
     while ((r = fread(buf, 1, sizeof(buf), file)) > 0) {
-        data += string(buf, buf + r);
+        data += std::string(buf, buf + r);
         if (r < sizeof(buf)) break;
     }
 

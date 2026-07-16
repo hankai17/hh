@@ -18,7 +18,7 @@ struct Fsa {
     Fsa operator&(const Fsa &rhs) const;
     Fsa operator|(const Fsa &rhs) const;
     Fsa operator-(const Fsa &rhs) const;
-    void hopcroft_minimize();
+    Fsa hopcroft_minimize();
     Fsa determinize() const;
-}
+};
 

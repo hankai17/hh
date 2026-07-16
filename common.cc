@@ -1,11 +1,12 @@
-#include "common.hh"
 #include <cstring>
-
 #include <errno.h>
 #include <execinfo.h>
 #include <string.h>
 #include <sysexits.h>
 #include <stdlib.h>
+#include <cstdio>
+
+#include "common.hh"
 
 #define SGR0    "\x1b[m"
 #define RED     "\x1b[1;31m"

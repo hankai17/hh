@@ -1,7 +1,7 @@
 #CXXFLAGS := -g3 -std=c++1y -fsanitize=undefined,address
 CXXFLAGS := -g -O0 -std=c++1y -fsanitize=undefined,address
 LDFLAGS  := -fsanitize=undefined,address
-O := common.o lexer_helper.o lexer.o location.o main.o parser.o syntax.o loader.o option.o
+O := common.o lexer_helper.o lexer.o location.o main.o parser.o syntax.o loader.o option.o fsa.o
 
 all: hh
 
