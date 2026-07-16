@@ -7,6 +7,7 @@
 #include <set>
 #include <cstdint>
 #include <climits>
+#include <iostream>
 
 template <typename T>
 struct std::hash<std::vector<T>> {
@@ -174,13 +175,13 @@ Fsa Fsa::operator-(const Fsa &rhs) const {
 }
 
 Fsa Fsa::determinize() const {
-    Fsa r;
+    Fsa r;                                                          // 新DFA
     std::unordered_map<std::vector<long>, long> m;
     std::vector<std::vector<long>> q{{start}};
     std::vector<std::vector<std::pair<long, long>>::const_iterator> its(n());
     std::vector<long> vs;
-    epsilon_closure(q[0]);
-    m[q[0]] = 0;
+    epsilon_closure(q[0]);                                          // in-out q[0]存储 沿着空边递归寻找可达状态
+    m[q[0]] = 0;                                                    // 设置状态为 0
     r.start = 0;
     REP (i, q.size()) {
         bool final = false;
@@ -214,16 +215,34 @@ Fsa Fsa::determinize() const {
                 }
             }
             std::sort(ALL(vs));
+
             vs.erase(std::unique(ALL(vs)), vs.end());
             epsilon_closure(vs);
+
+            std::cout << "vs: ";
+            for (auto &v : vs) {
+                std::cout << v << ", ";
+            }
+            std::cout << std::endl;
+
             auto mit = m.find(vs);
             if (mit == m.end()) {
                 mit = m.emplace(vs, m.size()).first;
                 q.push_back(vs);
             }
             r.adj[i].emplace_back(c, mit->second);
+            std::cout << "mit->second: " << mit->second << std::endl;
         }
     }
+
+    for (auto &e : m) {
+        std::cout << "status: " << e.second << ", contains: ";
+        for (auto &v : e.first) {
+            std::cout << v << ", ";
+        }
+        std::cout << std::endl;
+    }
+    
     return r;
 }
 
@@ -320,10 +339,8 @@ Fsa Fsa::hopcroft_minimize() {
             if (CC[fy] < C[fy]) {                   // ------> 2.1 分区中一部分状态被 a 转移走了 一部分没有 所以需要分裂
                 long fu = -1;
                 long u = -1;
-                long cu = 0;
                 long fv = -1;
                 long v = -1;
-                long cv = 0;
 
                 for (long i = fy;;) {               // ------> 2.2 遍历整个非终止态 eg: 从A态开始遍历
                     if (mark[i]) {                  // ------> 2.2.1 A态是这个a字符所依赖的状态
