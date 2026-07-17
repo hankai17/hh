@@ -202,7 +202,7 @@ bracket:                                            // 字符集
     }
 
 bracket_items:
-    | bracket_items CHAR '-' CHAR {                 // 递归 // 前提是必需得有上面的基础作为起点/引子 才能递归
+    bracket_items CHAR '-' CHAR {                   // 递归 // 前提是必需得有上面的基础作为起点/引子 才能递归
         $$ = $1;                                    // 把原来的 bitset 继承下来
         if ($2 > $4) {
             FAIL(yyloc, "Negative range in character class");
