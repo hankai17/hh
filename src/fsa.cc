@@ -76,10 +76,11 @@ Fsa Fsa::operator~() const {
 
 Fsa Fsa::operator&(const Fsa &rhs) const {
     Fsa r;
-    std::vector<std::pair<long, long>> q;
     long u0;
     long u1;
     std::unordered_map<long, long> m;
+    std::vector<std::pair<long, long>> q;
+
     q.emplace_back(start, rhs.start);
     m[(rhs.n() + 1) * start + rhs.start] = 0;
     r.start = 0;
@@ -129,6 +130,8 @@ Fsa Fsa::operator|(const Fsa &rhs) const {
             r.adj[n() + i].emplace_back(e.first, n() + e.second);
         }
     }
+    //return r;
+    //return r.determinize();
     return r.determinize().hopcroft_minimize();
 }
 
@@ -219,11 +222,13 @@ Fsa Fsa::determinize() const {
             vs.erase(std::unique(ALL(vs)), vs.end());
             epsilon_closure(vs);
 
+            /*
             std::cout << "vs: ";
             for (auto &v : vs) {
                 std::cout << v << ", ";
             }
             std::cout << std::endl;
+            */
 
             auto mit = m.find(vs);
             if (mit == m.end()) {
@@ -231,7 +236,7 @@ Fsa Fsa::determinize() const {
                 q.push_back(vs);
             }
             r.adj[i].emplace_back(c, mit->second);
-            std::cout << "mit->second: " << mit->second << std::endl;
+            //std::cout << "mit->second: " << mit->second << std::endl;
         }
     }
 
@@ -416,6 +421,11 @@ Fsa Fsa::hopcroft_minimize() {
     r.start = B[start];
     r.adj.resize(nn);
     REP (i, n()) {
+        for (auto &e : adj[i]) {
+            r.adj[B[i]].emplace_back(e.first, B[e.second]);
+        }
+    }
+    REP (i, nn) {
         std::sort(ALL(r.adj[i]));
         r.adj[i].erase(std::unique(ALL(r.adj[i])), r.adj[i].end());
     }

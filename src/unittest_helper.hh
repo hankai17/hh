@@ -31,7 +31,7 @@ static Fsa read_nfa() {
         if (v < 0 || v >= n) {
             errx(EX_DATAERR, "%ld: 0 <= v < n", v);
         }
-        std::cout << "u: " << u << ", a:" << a << " v:" << v << std::endl;
+        //std::cout << "u: " << u << ", a:" << a << " v:" << v << std::endl;
         r.adj[u].emplace_back(a, v);
     }
     assert(std::cin.good());
