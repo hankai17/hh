@@ -42,11 +42,6 @@ void Fsa::epsilon_closure(std::vector<long> &src) const {   // 计算ε-闭包 /
     std::sort(ALL(src));
 }
 
-void Fsa::product(const Fsa &rhs,
-            std::vector<std::pair<long, long>> &nodes,
-            std::vector<std::vector<std::pair<long, long>>> &edges) const {
-}
-
 Fsa Fsa::operator~() const {
     Fsa r;
     r.adj.resize(n() + 1);
@@ -74,7 +69,7 @@ Fsa Fsa::operator~() const {
     return r;
 }
 
-Fsa Fsa::operator&(const Fsa &rhs) const {
+Fsa Fsa::intersect(const Fsa &rhs, std::function<void (long, long)> relate) const {
     Fsa r;
     long u0;
     long u1;
@@ -90,6 +85,7 @@ Fsa Fsa::operator&(const Fsa &rhs) const {
             r.finals.push_back(i);
         }
         r.adj.emplace_back();
+        relate(u0, u1);
         auto it0 = adj[u0].begin();
         auto it1 = rhs.adj[u1].begin();
         
@@ -114,28 +110,7 @@ Fsa Fsa::operator&(const Fsa &rhs) const {
     return r;
 }
 
-Fsa Fsa::operator|(const Fsa &rhs) const {
-    Fsa r;
-    r.start = n() + rhs.n(); 
-    r.finals = finals;
-    for (long i : rhs.finals) {
-        r.finals.push_back(n() + i);
-    }
-    r.adj = adj;
-    r.adj.resize(r.start + 1);
-    r.adj[r.start].emplace_back(-1, 0);
-    r.adj[r.start].emplace_back(-1, n());
-    REP (i, rhs.n()) {
-        for (auto &e : rhs.adj[i]) {
-            r.adj[n() + i].emplace_back(e.first, n() + e.second);
-        }
-    }
-    //return r;
-    //return r.determinize();
-    return r.determinize().hopcroft_minimize();
-}
-
-Fsa Fsa::operator-(const Fsa &rhs) const {
+Fsa Fsa::difference(const Fsa &rhs, std::function<void (long, long)> relate) const {
     Fsa r;
     std::vector<std::pair<long, long>> q;
     long u0;
@@ -150,6 +125,7 @@ Fsa Fsa::operator-(const Fsa &rhs) const {
             r.finals.push_back(i);
         }
         r.adj.emplace_back();
+        relate(u0, u1 == rhs.n() ? -1 : u1);
         auto it0 = adj[u0].begin();
         auto it1 = rhs.adj[u1].begin();
         auto it1e = it1;
@@ -163,8 +139,8 @@ Fsa Fsa::operator-(const Fsa &rhs) const {
             while (it1 != it1e && it1->first < it0->first) {
                 ++it1;
             }
-            long v1 = it1 != it1e || it1->first == it1e->first ?
-                    it1->second : rhs.n();
+            long v1 = it1 != it1e &&
+                    it1->first == it1e->first ?  it1->second : rhs.n();
             long t = (rhs.n() + 1) * it0->second + v1;
             auto mit = m.find(t);
             if (mit == m.end()) {
@@ -177,7 +153,7 @@ Fsa Fsa::operator-(const Fsa &rhs) const {
     return r;
 }
 
-Fsa Fsa::determinize() const {
+Fsa Fsa::determinize(std::function<void (std::vector<long>&)> relate) const {
     Fsa r;                                                          // 新DFA
     std::unordered_map<std::vector<long>, long> m;
     std::vector<std::vector<long>> q{{start}};
@@ -187,6 +163,7 @@ Fsa Fsa::determinize() const {
     m[q[0]] = 0;                                                    // 设置状态为 0
     r.start = 0;
     REP (i, q.size()) {
+        relate(q[i]);
         bool final = false;
         for (long u : q[i]) {
             if (std::binary_search(ALL(finals), u)) {
@@ -251,7 +228,7 @@ Fsa Fsa::determinize() const {
     return r;
 }
 
-Fsa Fsa::hopcroft_minimize() {
+Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
     std::vector<std::vector<std::pair<long, long>>> radj(n());
     REP (i, n()) {
         for (auto &e : adj[i]) {
@@ -404,14 +381,18 @@ Fsa Fsa::hopcroft_minimize() {
     }
     Fsa r;
     long nn = 0;
+    std::vector<long> vs;
     REP (i, n()) {
         if (B[i] == i) {
+            vs.clear();
             for (long j = i;;) {
                 B[j] = nn;
+                vs.push_back(j);
                 if ((j = R[j]) == i) {
                     break;
                 }
             }
+            relate(vs);
             if (std::binary_search(ALL(finals), i)) {
                 r.finals.push_back(nn);
             }

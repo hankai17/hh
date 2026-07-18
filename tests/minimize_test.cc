@@ -87,11 +87,13 @@ int main(int argc, char **argv) {
         unlink(filename);
     }
 
+    //auto relate = [](const std::vector<long>&) {};
+    auto relate = [](long u, long v) {};
     Fsa a = read_nfa();
     Fsa b = read_nfa();
     //Fsa f = a | b;
     //Fsa f = a & b;
-    Fsa f = a - b;
+    Fsa f = a.difference(b, relate);
     print_fsa(f);
     std::cout << "f.n(): " << f.n() << std::endl;
 

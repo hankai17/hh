@@ -42,6 +42,7 @@ struct ConcatExpr;      // 连接表达式: 隐式默认存在 常见的组合�
 struct DifferenceExpr;  // 差集表达式: [a-z] - [aeiou] 可以匹配辅音字母
 struct DotExpr;
 struct EmbedExpr;       // 嵌入表达式: 普通引用一个非终结符（没有 ! 或 & 修饰符） // 用于表示一个标识符（变量名、子模式名等）直接作为表达式使用
+struct IntersectExpr;
 struct LiteralExpr;
 struct MaybeExpr;
 struct PlusExpr;        // 正闭包表达式: 对应正则中的 +
@@ -57,6 +58,7 @@ struct Visitor<Expr> {                              // 1 visitor虚基类定义e
     virtual void visit(DifferenceExpr &) = 0;
     virtual void visit(DotExpr &) = 0;
     virtual void visit(EmbedExpr &) = 0;
+    virtual void visit(IntersectExpr &) = 0;
     virtual void visit(LiteralExpr &) = 0;
     virtual void visit(MaybeExpr &) = 0;
     virtual void visit(PlusExpr &) = 0;
@@ -200,6 +202,7 @@ struct DotExpr : Visitable<Expr, DotExpr> {
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
     char *qualified;
     char *ident;
+    DefineStmt *define_stmt = NULL;
 
     EmbedExpr(char *qualified, char *ident) :
         qualified(qualified),
@@ -213,6 +216,21 @@ struct EmbedExpr : Visitable<Expr, EmbedExpr> {
     ~EmbedExpr() {
         free(qualified);
         free(ident);
+    }
+};
+
+struct IntersectExpr : Visitable<Expr, IntersectExpr> {
+    Expr *lhs;
+    Expr *rhs;
+    IntersectExpr(Expr *lhs, Expr *rhs) :
+        lhs(lhs), rhs(rhs) {
+#ifdef DEBUG_CLS 
+        printf("new IntersectExpr\n");
+#endif
+    }
+    ~IntersectExpr() {
+        delete lhs;
+        delete rhs;
     }
 };
 
@@ -300,10 +318,12 @@ struct ActionStmt : Visitable<Stmt, ActionStmt> {
     }
 };
 
+struct Module;
 struct DefineStmt : Visitable<Stmt, DefineStmt> {                   // x = 5 + 3;
     bool export_;
     char *lhs;  // 左值（变量名）
     Expr *rhs;  // 右值（表达式
+    Module *module;
 
     DefineStmt(bool export_, char *lhs, Expr *rhs) :
         export_(export_),
@@ -464,6 +484,14 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         }
     }
 
+    void visit(IntersectExpr &expr) override {
+        printf("%*s%s\n", 2 * depth, "", "IntersectExpr");
+        depth++;
+        expr.lhs->accept(*this);
+        expr.rhs->accept(*this);
+        depth--;
+    }
+
     void visit(LiteralExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "LiteralExpr");
         printf("%*s%s\n", 2 * (depth + 1), "", expr.literal);
@@ -573,12 +601,16 @@ struct PreorderActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<S
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor ConcatExpr\n");
 #endif
+        expr.lhs->accept(*this);
+        expr.rhs->accept(*this);
     }
 
     void visit(DifferenceExpr &expr) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor DifferenceExpr\n");
 #endif
+        expr.lhs->accept(*this);
+        expr.rhs->accept(*this);
     }
 
     void visit(DotExpr &expr) override {
@@ -591,6 +623,14 @@ struct PreorderActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<S
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor EmbedExpr\n");
 #endif
+    }
+
+    void visit(IntersectExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor IntersectExpr\n");
+#endif
+        expr.lhs->accept(*this);
+        expr.rhs->accept(*this);
     }
 
     void visit(LiteralExpr &expr) override {

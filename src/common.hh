@@ -30,3 +30,14 @@ void output_error(bool use_err, const char *format, va_list ap);
 void err_msg(const char *format, ...);
 void err_exit(int exitno, const char *format, ...);
 long get_long(const char *arg);
+
+template<class T>
+void sorted_insert(std::vector<T>& a, const T& x)
+{
+  a.emplace_back();
+  auto it = a.end();
+  for (; a.begin() != it && x < it[-1]; --it)
+    *it = it[-1];
+  *it = x;
+}
+

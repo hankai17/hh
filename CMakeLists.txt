@@ -47,6 +47,7 @@ set(COMMON_SOURCES
     ${SRC_DIR}/loader.cc
     ${SRC_DIR}/option.cc
     ${SRC_DIR}/fsa.cc
+    ${SRC_DIR}/fsa_anno.cc
 )
 
 # ==================== 主程序 hh ====================
