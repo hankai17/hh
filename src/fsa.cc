@@ -42,11 +42,6 @@ void Fsa::epsilon_closure(std::vector<long> &src) const {   // 计算ε-闭包 /
     std::sort(ALL(src));
 }
 
-void Fsa::product(const Fsa &rhs,
-            std::vector<std::pair<long, long>> &nodes,
-            std::vector<std::vector<std::pair<long, long>>> &edges) const {
-}
-
 Fsa Fsa::operator~() const {
     Fsa r;
     r.adj.resize(n() + 1);
