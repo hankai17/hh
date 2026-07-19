@@ -39,10 +39,11 @@ long get_long(const char *arg);
 template<class T>
 void sorted_insert(std::vector<T>& a, const T& x)
 {
-  a.emplace_back();
-  auto it = a.end();
-  for (; a.begin() != it && x < it[-1]; --it)
-    *it = it[-1];
-  *it = x;
+    a.emplace_back();
+    auto it = a.end();
+    while (a.begin() != --it && x < it[-1]) {
+        *it = it[-1];
+    }
+    *it = x;
 }
 

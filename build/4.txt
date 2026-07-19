@@ -1,0 +1,8 @@
+#b = "123aa"
+#a = !b
+
+ws = [ \t\r\n]+
+from = ('FROM' | 'from')
+ref = !select_stmt
+export select_stmt = ws from
+

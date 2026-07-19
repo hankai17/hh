@@ -91,6 +91,7 @@ int yylex(YYSTYPE *yylval, YYLTYPE *loc, Stmt *&res, long &errors,
         free(yylval->errmsg);
     }
     
+/*
     if (token == YYEMPTY) {
         locfile.locate(*loc, "EMPTY");
     }
@@ -121,6 +122,7 @@ int yylex(YYSTYPE *yylval, YYLTYPE *loc, Stmt *&res, long &errors,
     if (token == BRACED_CODE) {
         locfile.locate(*loc, "BRACED_CODE: %s\n", yylval->string);
     }
+*/
     return token;
 }
 %}
@@ -163,7 +165,7 @@ union_expr:                                         // 并集  ab即a后边跟�
 
 intersect_expr:
     difference_expr { $$ = $1; }
-    | intersect_expr '|' difference_expr { $$ = new IntersectExpr($1, $3); }
+    | intersect_expr '&' difference_expr { $$ = new IntersectExpr($1, $3); }
 
 difference_expr:                                    // 差集
     concat_expr { $$ = $1; }
@@ -197,7 +199,7 @@ action:
 bracket:                                            // 字符集
     '[' bracket_items ']' {                         // bracket_items { $$ = $1;
         $$ = $2;
-        printf("bracket [ ] \n");
+        //printf("bracket [ ] \n");
     }
     | '[' '^' bracket_items ']' {
         $$ = $3;

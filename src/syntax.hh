@@ -4,7 +4,7 @@
 #include <bitset>
 #include <vector>
 
-#define DEBUG_CLS 1
+//#define DEBUG_CLS 0
 
 template <class T>
 struct Visitor;

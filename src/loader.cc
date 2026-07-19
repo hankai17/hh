@@ -16,6 +16,8 @@
 #include <unordered_map>
 #include <functional>
 
+//#define DEBUG_ON 0
+
 static std::map<std::pair<dev_t, ino_t>, Module> inode2module;
 static std::unordered_map<DefineStmt*, std::vector<DefineStmt*>> depended_by;
 
@@ -54,7 +56,9 @@ struct ModuleImportDef : PreorderStmtVisitor {
     }
 
     void visit(ActionStmt &stmt) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor ActionStmt\n" << std::endl;
+#endif
         if (mod.named_action.count(stmt.ident)) {
             n_errors++;
             mod.locfile.locate(stmt.loc, "Redefined '%s'\n", stmt.ident);
@@ -63,17 +67,23 @@ struct ModuleImportDef : PreorderStmtVisitor {
     }
 
     void visit(DefineStmt &stmt) override {                             // 1.3 接普通语句
+#ifdef DEBUG_ON
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor DefineStmt\n" << std::endl;
+#endif
         mod.defined.emplace(stmt.lhs, &stmt);
         stmt.module = &mod;
         depended_by[&stmt];
     }
 
     void visit(ImportStmt &stmt) override {                             // 1.3 接import语句
+#ifdef DEBUG_ON
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor ImportStmt\n" << std::endl;
         std::cout << "before load_module...\n" << std::endl;
+#endif
         Module *m = load_module(n_errors, stmt.filename);                         // 1.3.1 边消费边生产模型
+#ifdef DEBUG_ON
         std::cout << "after load_module...\n" << std::endl;
+#endif
         if (!m) {
             n_errors++;
             mod.locfile.locate(stmt.loc, "'%s' : %s", stmt.filename,
@@ -99,23 +109,31 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     }
 
     void visit(DefineStmt &stmt) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor DefineStmt\n" << std::endl;
+#endif
         define_stmt = &stmt;
         stmt.rhs->accept(*this);
         define_stmt = NULL;
     }
     
     void visit(BracketExpr &expr) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor BracketExpr\n" << std::endl;
+#endif
     }
 
     void visit(ClosureExpr &expr) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor ClosureExpr\n" << std::endl;
+#endif
         expr.inner->accept(*this);
     }
 
     void visit(CollapseExpr &expr) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor CollapseExpr\n" << std::endl;
+#endif
         if (expr.qualified) {
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
@@ -137,7 +155,9 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     }
 
     void visit(EmbedExpr &expr) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor EmbedExpr\n" << std::endl;
+#endif
         if (expr.qualified) {                                   // 限定符场景
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
@@ -177,17 +197,23 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     }
 
     void visit(MaybeExpr &expr) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor MaybeExpr\n" << std::endl;
+#endif
         expr.inner->accept(*this);
     }
 
     void visit(PlusExpr &expr) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor PlusExpr\n" << std::endl;
+#endif
         expr.inner->accept(*this);
     }
 
     void visit(UnionExpr &expr) override {
+#ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr\n" << std::endl;
+#endif
         expr.lhs->accept(*this);
         expr.rhs->accept(*this);
     }
