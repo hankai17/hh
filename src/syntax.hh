@@ -428,10 +428,9 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
             if (!expr.charset[i]) {
                 i++;
             } else {
-                for (j = i; j < expr.charset.size() && expr.charset[j]; j++) {
-                    printf(" %ld-%ld", i, j - 1);
-                    i = j;
-                }
+                for (j = i; j < expr.charset.size() && expr.charset[j]; j++);
+                printf(" %ld-%ld", i, j - 1);
+                i = j;
             }
         }
         puts("");
@@ -446,7 +445,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
     void visit(CollapseExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "CollapseExpr");
-        printf("%*s\n", 2 * (depth + 1), "");
+        printf("%*s", 2 * (depth + 1), "");
         if (expr.qualified) {
             printf("%s.%s\n", expr.qualified, expr.ident);
         } else {
