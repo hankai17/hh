@@ -1,0 +1,356 @@
+./hh sql.txt -t 
+line 1 1-2: IDENT: ws
+
+line 1 7-7: CHAR: 空格      ---> Bison 使用栈来维护解析状态： 每匹配一条规则，就把右边的符号弹出栈，把左边的符号压入栈 递归规则会不断压栈，直到匹配完所有字符 所以即使先匹配了 %empty，Parser 依然记得它是在 bracket_items 的上下文中，继续等待后面的 CHAR。 
+line 1 8-9: CHAR: t
+
+line 1 10-11: CHAR: r
+
+line 1 12-13: CHAR: n
+
+bracket [ ] 
+new BracketExpr
+new PlusExpr
+new DefineStmt: lhs: ws, rhs: TODO
+
+line 2 1-6: IDENT: opt_ws
+
+line 2 11-11: CHAR:  
+
+line 2 12-13: CHAR: t
+
+line 2 14-15: CHAR: r
+
+line 2 16-17: CHAR: n
+
+bracket [ ] 
+new BracketExpr
+new ClosureExpr
+new DefineStmt: lhs: opt_ws, rhs: TODO
+
+line 3 1-5: IDENT: ident
+
+line 3 10-10: CHAR: a
+
+line 3 12-12: CHAR: z
+
+line 3 13-13: CHAR: A
+
+line 3 15-15: CHAR: Z
+
+line 3 16-16: CHAR: _
+
+bracket [ ] 
+new BracketExpr
+line 3 20-20: CHAR: a
+
+line 3 22-22: CHAR: z
+
+line 3 23-23: CHAR: A
+
+line 3 25-25: CHAR: Z
+
+line 3 26-26: CHAR: 0
+
+line 3 28-28: CHAR: 9
+
+line 3 29-29: CHAR: _
+
+bracket [ ] 
+new BracketExpr
+new ClosureExpr
+new ConcatExpr
+new DefineStmt: lhs: ident, rhs: TODO
+
+
+line 4 1-6: IDENT: number
+
+line 4 11-11: CHAR: 0
+
+line 4 13-13: CHAR: 9
+
+bracket [ ] 
+new BracketExpr
+new PlusExpr
+new DefineStmt: lhs: number, rhs: TODO
+
+
+line 5 1-6: IDENT: string
+
+line 5 12-12: STRING_LITERAL: '
+
+new LiteralExpr: literal: '
+line 5 16-16: CHAR: '
+
+new BracketExpr
+new ClosureExpr
+line 5 22-22: STRING_LITERAL: '
+
+new ConcatExpr
+new LiteralExpr: literal: '
+new ConcatExpr
+new DefineStmt: lhs: string, rhs: TODO
+
+
+line 6 1-7: IDENT: literal
+
+line 6 11-16: IDENT: number
+
+new EmbedExpr: qualified: (null), ident: number
+line 6 20-25: IDENT: string
+
+new EmbedExpr: qualified: (null), ident: string
+new UnionExpr
+new DefineStmt: lhs: literal, rhs: TODO
+
+
+
+line 7 1-2: IDENT: op
+
+line 7 8-8: STRING_LITERAL: =
+
+new LiteralExpr: literal: =
+line 7 15-15: STRING_LITERAL: !=
+
+new LiteralExpr: literal: !=
+new UnionExpr
+line 7 21-21: STRING_LITERAL: <
+
+new LiteralExpr: literal: <
+new UnionExpr
+line 7 27-27: STRING_LITERAL: >
+
+new LiteralExpr: literal: >
+new UnionExpr
+line 7 34-34: STRING_LITERAL: <=
+
+new LiteralExpr: literal: <=
+new UnionExpr
+line 7 41-41: STRING_LITERAL: >=
+
+new LiteralExpr: literal: >=
+new UnionExpr
+line 7 50-50: STRING_LITERAL: like
+
+new LiteralExpr: literal: like
+new UnionExpr
+line 7 59-59: STRING_LITERAL: LIKE
+
+new LiteralExpr: literal: LIKE
+new UnionExpr
+new DefineStmt: lhs: op, rhs: TODO
+
+
+
+line 9 1-9: IDENT: expr_atom
+
+line 9 13-17: IDENT: ident
+
+line 9 19-24: IDENT: opt_ws
+
+new EmbedExpr: qualified: (null), ident: ident
+line 9 26-27: IDENT: op
+
+new EmbedExpr: qualified: (null), ident: opt_ws
+new ConcatExpr
+line 9 29-34: IDENT: opt_ws
+
+new EmbedExpr: qualified: (null), ident: op
+new ConcatExpr
+new EmbedExpr: qualified: (null), ident: opt_ws
+new ConcatExpr
+line 9 38-44: IDENT: literal
+
+new EmbedExpr: qualified: (null), ident: literal
+line 9 50-50: STRING_LITERAL: (
+
+new LiteralExpr: literal: (
+line 9 52-57: IDENT: opt_ws
+
+new EmbedExpr: qualified: (null), ident: opt_ws
+new ConcatExpr
+line 9 60-70: IDENT: select_stmt
+
+line 9 72-77: IDENT: opt_ws
+
+new CollapseExpr: qualified: (null), ident: select_stmt
+new ConcatExpr
+line 9 81-81: STRING_LITERAL: )
+
+new EmbedExpr: qualified: (null), ident: opt_ws
+new ConcatExpr
+new LiteralExpr: literal: )
+new ConcatExpr
+new UnionExpr
+new ConcatExpr
+new DefineStmt: lhs: expr_atom, rhs: TODO
+line 18 72-72: YYEOF
+visit ModuleImportDef:PreorderStmtVisitor DefineStmt
+
+visit ModuleImportDef:PreorderStmtVisitor DefineStmt
+
+visit ModuleImportDef:PreorderStmtVisitor DefineStmt
+
+visit ModuleImportDef:PreorderStmtVisitor DefineStmt
+
+visit ModuleImportDef:PreorderStmtVisitor DefineStmt
+
+visit ModuleImportDef:PreorderStmtVisitor DefineStmt
+
+visit ModuleImportDef:PreorderStmtVisitor DefineStmt
+
+visit ModuleImportDef:PreorderStmtVisitor DefineStmt
+
+visit PreorderStmtVisitor EmptyStmt
+visit PreorderActionExprStmtVisitor DefineStmt
+visit ModuleUse:PreorderActionExprStmtVisitor PlusExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor BracketExpr
+
+visit PreorderActionExprStmtVisitor DefineStmt
+visit ModuleUse:PreorderActionExprStmtVisitor ClosureExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor BracketExpr
+
+visit PreorderActionExprStmtVisitor DefineStmt
+visit PreorderActionExprStmtVisitor ConcatExpr
+visit PreorderActionExprStmtVisitor DefineStmt
+visit ModuleUse:PreorderActionExprStmtVisitor PlusExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor BracketExpr
+
+visit PreorderActionExprStmtVisitor DefineStmt
+visit PreorderActionExprStmtVisitor ConcatExpr
+visit PreorderActionExprStmtVisitor DefineStmt
+visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor EmbedExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor EmbedExpr
+
+visit PreorderActionExprStmtVisitor DefineStmt
+visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr
+
+visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr
+
+visit PreorderActionExprStmtVisitor LiteralExpr
+visit PreorderActionExprStmtVisitor LiteralExpr
+visit PreorderActionExprStmtVisitor LiteralExpr
+visit PreorderActionExprStmtVisitor LiteralExpr
+visit PreorderActionExprStmtVisitor LiteralExpr
+visit PreorderActionExprStmtVisitor LiteralExpr
+visit PreorderActionExprStmtVisitor LiteralExpr
+visit PreorderActionExprStmtVisitor LiteralExpr
+visit PreorderActionExprStmtVisitor DefineStmt
+visit PreorderActionExprStmtVisitor ConcatExpr
+visit PreorderActionExprStmtVisitor EmptyStmt
+DefineStmt
+  ws
+  PlusExpr
+    BracketExpr
+       32-32 110-110 114-114 116-116
+DefineStmt
+  opt_ws
+  ClosureExpr
+    BracketExpr
+       32-32 110-110 114-114 116-116
+DefineStmt
+  ident
+  ConcatExpr
+    BracketExpr
+       65-90 95-95 97-122
+    ClosureExpr
+      BracketExpr
+         48-57 65-90 95-95 97-122
+DefineStmt
+  number
+  PlusExpr
+    BracketExpr
+       48-57
+DefineStmt
+  string
+  ConcatExpr
+    ConcatExpr
+      LiteralExpr
+        '
+      ClosureExpr
+        BracketExpr
+           0-38 40-255
+    LiteralExpr
+      '
+DefineStmt
+  literal
+  UnionExpr
+    EmbedExpr
+      number
+    EmbedExpr
+      string
+DefineStmt
+  op
+  UnionExpr
+    UnionExpr
+      UnionExpr
+        UnionExpr
+          UnionExpr
+            UnionExpr
+              UnionExpr
+                LiteralExpr
+                  =
+                LiteralExpr
+                  !=
+              LiteralExpr
+                <
+            LiteralExpr
+              >
+          LiteralExpr
+            <=
+        LiteralExpr
+          >=
+      LiteralExpr
+        like
+    LiteralExpr
+      LIKE
+
+DefineStmt
+  expr_atom
+  ConcatExpr
+    ConcatExpr
+      ConcatExpr
+        ConcatExpr
+          EmbedExpr
+            ident
+          EmbedExpr
+            opt_ws
+        EmbedExpr
+          op
+      EmbedExpr
+        opt_ws
+    UnionExpr
+      EmbedExpr
+        literal
+      ConcatExpr
+        ConcatExpr
+          ConcatExpr
+            ConcatExpr
+              LiteralExpr
+                (
+              EmbedExpr
+                opt_ws
+            CollapseExpr
+              
+select_stmt
+          EmbedExpr
+            opt_ws
+        LiteralExpr
+          )
+EmptyStmt
