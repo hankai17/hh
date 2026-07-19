@@ -16,6 +16,11 @@
 
 using ::va_list;
 
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+
 const size_t BUF_SIZE = 512;
 
 #define LEN_OF(x) (sizeof(x) / sizeof(*x))

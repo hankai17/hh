@@ -4,10 +4,11 @@
 #include <map>
 
 struct Module {
+    bool processed = false;
     LocationFile locfile;
     std::string filename;
     Stmt *toplevel;
-    std::set<std::string> defined;
+    std::map<std::string, DefineStmt*> defined;
     std::vector<Module*> unqualified_import;
     std::map<std::string, Module*> qualified_import;
     std::map<std::string, std::string> named_action;

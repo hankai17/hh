@@ -4,6 +4,7 @@
 #include "parser.hh"
 #include "syntax.hh"
 #include "option.hh"
+#include "compiler.hh"
 
 #include <algorithm>
 #include <sysexits.h>
@@ -12,8 +13,11 @@
 #include <unistd.h>
 #include <iostream>
 #include <string.h>
+#include <unordered_map>
+#include <functional>
 
 static std::map<std::pair<dev_t, ino_t>, Module> inode2module;
+static std::unordered_map<DefineStmt*, std::vector<DefineStmt*>> depended_by;
 
 long load(const char *filename);
 Module *load_module(const char *filename);
@@ -36,7 +40,7 @@ void print_module_info(Module &mod) {
 
     puts("defined:");
     for (auto &x : mod.defined) {
-        printf("    %s\n", x.c_str());
+        printf("    %s\n", x.first.c_str());
     }
 }
 
@@ -60,7 +64,9 @@ struct ModuleImportDef : PreorderStmtVisitor {
 
     void visit(DefineStmt &stmt) override {                             // 1.3 接普通语句
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor DefineStmt\n" << std::endl;
-        mod.defined.insert(stmt.lhs);
+        mod.defined.emplace(stmt.lhs, &stmt);
+        stmt.module = &mod;
+        depended_by[&stmt];
     }
 
     void visit(ImportStmt &stmt) override {                             // 1.3 接import语句
@@ -85,10 +91,18 @@ struct ModuleImportDef : PreorderStmtVisitor {
 struct ModuleUse : PreorderActionExprStmtVisitor {
     Module &mod;
     long &n_errors;
+    DefineStmt *define_stmt = NULL;
 
     ModuleUse(Module &mod, long &n_errors) :
         mod(mod),
         n_errors(n_errors) {
+    }
+
+    void visit(DefineStmt &stmt) override {
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor DefineStmt\n" << std::endl;
+        define_stmt = &stmt;
+        stmt.rhs->accept(*this);
+        define_stmt = NULL;
     }
     
     void visit(BracketExpr &expr) override {
@@ -128,18 +142,36 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
                 mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
-            } else if (!mod.qualified_import[expr.qualified]->defined.count(expr.ident)) {
-                n_errors++;
-                mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
+            } else {
+                auto it = mod.qualified_import[expr.qualified]->defined.find(expr.ident);
+                if (it == mod.qualified_import[expr.qualified]->defined.end()) {
+                    n_errors++;
+                    mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
+                } else {
+                    depended_by[it->second].push_back(define_stmt);
+                }
             }
         } else {                                                // 无限定符场景 或 一般场景
-            long c = mod.defined.count(expr.ident);             // 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
-            for (auto &it : mod.unqualified_import) {           // 无限定符场景
-                c += it->defined.count(expr.ident);
+            auto it = mod.defined.find(expr.ident);// 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
+            bool found = it != mod.defined.end();
+            for (auto &import : mod.unqualified_import) {
+                auto it2 = import->defined.find(expr.ident);
+                if (it2 != import->defined.end()) {
+                    if (found) {
+                        n_errors++;
+                        mod.locfile.locate(expr.loc, "'%s' redefined in unqualified import %s\n",
+                                expr.ident, import->filename.c_str());
+                    } else {
+                        it = it2;
+                        found = true;
+                    }
+                }
             }
-            if (!c) {
+            if (!found) {
                 n_errors++;
                 mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
+            } else {
+                depended_by[it->second].push_back(define_stmt);
             }
         }
     }
@@ -215,6 +247,60 @@ Module *load_module(long &n_errors, const char *filename) {
     return &mod;
 }
 
+static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
+    std::vector<DefineStmt*> topo;
+    std::vector<DefineStmt*> st;
+    std::unordered_map<DefineStmt*, i8> vis;
+    std::function<bool(DefineStmt *)> dfs = [&] (DefineStmt *u) {
+        if (vis[u] == 2) {
+            return false;
+        }
+        if (vis[u] == 1) {
+            u->module->locfile.locate(u->loc, "'%s': circular embedding", u->lhs);
+            long i = st.size();
+            while (st[i - 1] != u) {
+                i--;
+            }
+            st.push_back(st[i - 1]);
+            for (; i < st.size(); i++) {
+                long line1;
+                long _line2;
+                long col1;
+                long col2;
+                //st[i]->module->locfile.locate(st[i]->loc, line1, col1, _line2, col2);
+                fprintf(stderr, "%s: %ld:%ld-%ld: required by %s\n",
+                        st[i]->module->locfile.filename.c_str(),
+                        line1 + 1,
+                        col1 + 1,
+                        col2,
+                        st[i]->lhs);
+                //st[i]->module->locfile.context(st[i]->loc);
+            }
+            fputs("\n", stderr);
+            return true;
+        }
+        vis[u] = 1;
+        st.push_back(u);
+        for (auto v : depended_by[u]) {
+            if (dfs(v)) {
+                return true;
+            }
+        }
+        st.pop_back();
+        vis[u] = 2;
+        topo.push_back(u);
+        return false;
+    };
+    for (auto &d : depended_by) {
+        if (dfs(d.first)) {
+            n_errors++;
+            return topo;
+        }
+    }
+    std::reverse(ALL(topo));
+    return topo;
+}
+
 long load(const char *filename) {
     long n_errors = 0;
 
@@ -222,43 +308,69 @@ long load(const char *filename) {
         return n_errors;
     }
 
-    if (!n_errors) {
+    printf("Processing import & def\n");
+    for (;;) {
+        bool done = true;
         for (auto &it : inode2module) {                     // 1.2 ModuleImportDef 能接所有语句
-            Module &mod = it.second;
-            ModuleImportDef p { mod, n_errors };
-            for (Stmt *s = mod.toplevel; s; s= s->next) {
-                s->accept(p);                               // 边消费 边生产
+            if (!it.second.processed) {
+                done = false;
+                Module &mod = it.second;
+                mod.processed = true;
+                ModuleImportDef p { mod, n_errors };
+                for (Stmt *s = mod.toplevel; s; s= s->next) {
+                    s->accept(p);                               // 边消费 边生产
+                }
             }
         }
-    }
-
-    if (!n_errors) {
-        for (auto &it : inode2module) {
-            Module &mod = it.second;                        // 这里mod 是"全局的" 意思是 ModuleImportDef ModuleUse 公用同一个
-            ModuleUse p { mod, n_errors };                  // 2 遍历表达式 既遍历stmt等号右边的expr
-            for (Stmt *s = mod.toplevel; s; s= s->next) {
-                s->accept(p);
-            }
+        if (done) {
+            break;
         }
     }
+    if (n_errors) {
+        return n_errors; 
+    }
 
-    if (opt_module_info && !n_errors) {
+    printf("Processing use\n");
+
+    for (auto &it : inode2module) {
+        Module &mod = it.second;                        // 这里mod 是"全局的" 意思是 ModuleImportDef ModuleUse 公用同一个
+        ModuleUse p { mod, n_errors };                  // 2 遍历表达式 既遍历stmt等号右边的expr
+        for (Stmt *s = mod.toplevel; s; s= s->next) {
+            s->accept(p);
+        }
+    }
+    if (n_errors) {
+        return n_errors; 
+    }
+
+    if (opt_module_info) {
         for (auto &it : inode2module) {
             Module &mod = it.second;
             print_module_info(mod);
         }
     }
 
-    if (opt_dump_tree && !n_errors) {
+    if (opt_dump_tree) {
         StmtPrinter p;
         for (auto &it : inode2module) {
             Module &mod = it.second;
+            printf("=== %s\n", mod.filename.c_str());
             for (Stmt *s = mod.toplevel; s; s= s->next) {
                 s->accept(p);
             }
         }
     }
 
+    printf("Topological sorting\n");
+    std::vector<DefineStmt*> topo = topo_define_stmts(n_errors);
+    if (n_errors) {
+        return n_errors; 
+    }
+
+    printf("Compiling DefineStmt\n");
+    for (auto stmt : topo) {
+        compile(stmt);
+    }
     return n_errors;
 }
 

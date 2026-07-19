@@ -48,6 +48,7 @@ set(COMMON_SOURCES
     ${SRC_DIR}/option.cc
     ${SRC_DIR}/fsa.cc
     ${SRC_DIR}/fsa_anno.cc
+    ${SRC_DIR}/compiler.cc
 )
 
 # ==================== 主程序 hh ====================

@@ -8,7 +8,7 @@ static void print_fsa(const Fsa &fsa) {
     printf("start: %ld\n", fsa.start);
     printf("finals:");
     for (long i : fsa.finals) {
-        printf(" %ld", i)
+        printf(" %ld", i);
     }
     puts("");
     puts("edges:");
@@ -25,7 +25,7 @@ struct Compiler : Visitor<Expr> {
     std::stack<FsaAnno> st;
 
     void visit(Expr &expr) override {
-        expr.accept(&this);
+        expr.accept(*this);
     }
 
     void visit(BracketExpr &expr) override {
@@ -88,12 +88,11 @@ struct Compiler : Visitor<Expr> {
         expr.rhs->accept(*this);
         FsaAnno rhs = std::move(st.top());
         expr.lhs->accept(*this);
-        st.top().union_(rhs);
+        st.top().union_(rhs, expr);
     }
-
 };
 
-void compile(DefineStmt *) {
+void compile(DefineStmt *stmt) {
     if (compiled.count(stmt)) {
         return;
     }
@@ -103,8 +102,8 @@ void compile(DefineStmt *) {
     anno = std::move(comp.st.top());
 }
 
-void export_statement(DefineStmt *) {
-    printf("Exporting %s", stmt->lhs.c_str());
+void export_statement(DefineStmt *stmt) {
+    printf("Exporting %s", stmt->lhs);
     FsaAnno &anno = compiled[stmt];
     anno.determinize();
     anno.minimize();
