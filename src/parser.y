@@ -149,7 +149,7 @@ stmt_list:                                          // 支持空列表 + 链表�
         $$ = $3;
     }
 
-stmt:                                               // 支持两种语句: 普通赋值：x = expr; 初始化赋值：x := expr;
+stmt:
     IDENT '=' union_expr { $$ = new DefineStmt(false, $1, $3); $$->loc = yyloc; }
     | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, $2, $4); $$->loc = yyloc; }
     | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt($2, $4); $$->loc = yyloc; }
@@ -165,18 +165,18 @@ difference_expr:                                    // 差集
     concat_expr { $$ = $1; }
     | difference_expr '-' factor { $$ = new DifferenceExpr($1, $3); }
 
-concat_expr:                                        // 链接
+concat_expr:                                        // 隐式链接
     factor { $$ = $1; }
     | concat_expr factor { $$ = new ConcatExpr($1, $2); }
 
-factor:                                             // 基础因子
-    IDENT { $$ = new EmbedExpr(NULL, $1); $$->loc = yyloc; }         // IDENT类型 创建的AST实例类型是EmbedExpr       eg: abc
+factor:                                             // 后缀运算/基础因子 优先级最高
+    IDENT { $$ = new EmbedExpr(NULL, $1); $$->loc = yyloc; }
     | IDENT SEMISEMI IDENT { $$ = new EmbedExpr($1, $3); $$->loc = yyloc; }
-    | '&' IDENT { $$ = new CollapseExpr(NULL, $2); $$->loc = yyloc; }// &IDENT ...                                   eg: &ref
-    | '&' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); $$->loc = yyloc; }   // ?
+    | '&' IDENT { $$ = new CollapseExpr(NULL, $2); $$->loc = yyloc; }
+    | '&' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); $$->loc = yyloc; }
     | STRING_LITERAL { $$ = new LiteralExpr($1); $$->loc = yyloc; }
     | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
-    | bracket { $$ = new BracketExpr($1); }         // bracket类型 创建的AST实例类型是BracketExpr   eg: [a-z]
+    | bracket { $$ = new BracketExpr($1); }
     | '(' union_expr ')' { $$ = $2; }
     | factor '>' action { $$ = $1; $1->entering.push_back($3); }
     | factor '@' action { $$ = $1; $1->finishing.push_back($3); }
@@ -184,14 +184,14 @@ factor:                                             // 基础因子
     | factor '$' action { $$ = $1; $1->transiting.push_back($3); }
     | factor '?' { $$ = new MaybeExpr($1); }
     | factor '*' { $$ = new ClosureExpr($1); }
-    | factor '+' { $$ = new PlusExpr($1); }         // 
+    | factor '+' { $$ = new PlusExpr($1); }
 
 action:
     IDENT { $$ = new RefAction($1); $$->loc = yyloc; }
     | BRACED_CODE { $$ = new InlineAction($1); $$->loc = yyloc; }
 
-bracket:                                            // 字符集
-    '[' bracket_items ']' {                         // bracket_items { $$ = $1;
+bracket:
+    '[' bracket_items ']' {
         $$ = $2;
         printf("bracket [ ] \n");
     }
@@ -202,12 +202,12 @@ bracket:                                            // 字符集
     }
 
 bracket_items:
-    bracket_items CHAR '-' CHAR {                   // 递归 // 前提是必需得有上面的基础作为起点/引子 才能递归
-        $$ = $1;                                    // 把原来的 bitset 继承下来
+    bracket_items CHAR '-' CHAR {
+        $$ = $1;
         if ($2 > $4) {
             FAIL(yyloc, "Negative range in character class");
         } else {
-            FOR(i, $2, $4 + 1)                      // $2 是起始字符，$4 是结束字符
+            FOR(i, $2, $4 + 1)
                 $$->set(i);
         }
     }

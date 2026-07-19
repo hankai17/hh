@@ -90,7 +90,7 @@ IS  (u|U|l|L)*
 "import" return IMPORT;
 
 {L}({L}|{D})* {                                     // 匹配abc123 存到string里并返回IDENT
-    printf("DEBUG: IDENT recognized: '%s'\n", yytext);
+    //printf("DEBUG: IDENT recognized: '%s'\n", yytext);
     yylval->string = strdup(yytext);
     return IDENT;
 }
