@@ -66,21 +66,21 @@ struct ModuleImportDef : PreorderStmtVisitor {
         mod.named_action[stmt.ident] = stmt.code;
     }
 
-    void visit(DefineStmt &stmt) override {                             // 1.3 接普通语句
+    void visit(DefineStmt &stmt) override {                             // 2.1 接普通语句
 #ifdef DEBUG_ON
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor DefineStmt\n" << std::endl;
 #endif
-        mod.defined.emplace(stmt.lhs, &stmt);
+        mod.defined.emplace(stmt.lhs, &stmt);                           // 2.1.1 copy AST到 ModuleImportDef
         stmt.module = &mod;
         depended_by[&stmt];
     }
 
-    void visit(ImportStmt &stmt) override {                             // 1.3 接import语句
+    void visit(ImportStmt &stmt) override {                             // 2.2 接import语句
 #ifdef DEBUG_ON
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor ImportStmt\n" << std::endl;
         std::cout << "before load_module...\n" << std::endl;
 #endif
-        Module *m = load_module(n_errors, stmt.filename);                         // 1.3.1 边消费边生产模型
+        Module *m = load_module(n_errors, stmt.filename);               // 2.2.1 边消费边生产模型
 #ifdef DEBUG_ON
         std::cout << "after load_module...\n" << std::endl;
 #endif
@@ -90,9 +90,9 @@ struct ModuleImportDef : PreorderStmtVisitor {
                     errno ? strerror(errno) : "parse error");
             return;
         }
-        if (stmt.qualified) {                                           // 1.3.2 加载新文件 保存到当前mod里
-            mod.qualified_import[stmt.qualified] = m;                   // 1.3.3 有限定符 保存到当前mod的qualified_import里 eg: import file as f
-        } else if (std::count(ALL(mod.unqualified_import), m) == 0) {   // 1.3.3 无限定符 保存到当前mod的unqualified_import里 eg: import file
+        if (stmt.qualified) {                                           // 2.2.2 加载新文件 保存到当前mod里
+            mod.qualified_import[stmt.qualified] = m;                   // 2.2.3 有限定符 保存到当前mod的qualified_import里 eg: import file as f
+        } else if (std::count(ALL(mod.unqualified_import), m) == 0) {   // 2.2.3 无限定符 保存到当前mod的unqualified_import里 eg: import file
             mod.unqualified_import.push_back(m);
         }
     }
@@ -172,7 +172,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
                 }
             }
         } else {                                                // 无限定符场景 或 一般场景
-            auto it = mod.defined.find(expr.ident);// 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
+            auto it = mod.defined.find(expr.ident);             // 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
             bool found = it != mod.defined.end();
             for (auto &import : mod.unqualified_import) {
                 auto it2 = import->defined.find(expr.ident);
@@ -269,7 +269,7 @@ Module *load_module(long &n_errors, const char *filename) {
     Module &mod = inode2module[inode];
     mod.locfile = locfile;
     mod.filename = filename;
-    mod.toplevel = toplevel;                                // 1.1 toplevel 可能是 parser.y 中 stmt: 下 定义的那三种stmt
+    mod.toplevel = toplevel;                                    // 1.1 toplevel 可能是 parser.y 中 stmt: 下 定义的那三种stmt
     return &mod;
 }
 
@@ -330,21 +330,21 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
 long load(const char *filename) {
     long n_errors = 0;
 
-    if (!load_module(n_errors, filename)) {                 // 1 加载首文件 构建AST
+    if (!load_module(n_errors, filename)) {                 // 1 加载首文件 构建基本的(第一个)AST
         return n_errors;
     }
 
     printf("Processing import & def\n");
     for (;;) {
         bool done = true;
-        for (auto &it : inode2module) {                     // 1.2 ModuleImportDef 能接所有语句
+        for (auto &it : inode2module) {                     // 2 ModuleImportDef(能接所有语句) 根据基本的AST 构建完整的AST以及依赖关系
             if (!it.second.processed) {
                 done = false;
                 Module &mod = it.second;
                 mod.processed = true;
                 ModuleImportDef p { mod, n_errors };
                 for (Stmt *s = mod.toplevel; s; s= s->next) {
-                    s->accept(p);                               // 边消费 边生产
+                    s->accept(p);
                 }
             }
         }
@@ -357,10 +357,9 @@ long load(const char *filename) {
     }
 
     printf("Processing use\n");
-
     for (auto &it : inode2module) {
-        Module &mod = it.second;                        // 这里mod 是"全局的" 意思是 ModuleImportDef ModuleUse 公用同一个
-        ModuleUse p { mod, n_errors };                  // 2 遍历表达式 既遍历stmt等号右边的expr
+        Module &mod = it.second;
+        ModuleUse p { mod, n_errors };                      // 3 检查变量以及引用 是否正确
         for (Stmt *s = mod.toplevel; s; s= s->next) {
             s->accept(p);
         }

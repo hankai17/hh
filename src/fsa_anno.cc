@@ -61,18 +61,21 @@ FsaAnno FsaAnno::literal(LiteralExpr &expr) {
 
 void FsaAnno::concat(FsaAnno& rhs) {
     long ln = fsa.n(), rn = rhs.fsa.n();
-    for (long f: fsa.finals)
-        fsa.adj[f].emplace(fsa.adj[f].begin(), -1, ln+rhs.fsa.start);
+    for (long f : fsa.finals) {
+        fsa.adj[f].emplace(fsa.adj[f].begin(), -1, ln + rhs.fsa.start);
+    }
     for (auto& es: rhs.fsa.adj) {
         for (auto& e: es)
             e.second += ln;
         fsa.adj.emplace_back(std::move(es));
     }
     fsa.finals = std::move(rhs.fsa.finals);
-    for (long& f: fsa.finals)
+    for (long& f: fsa.finals) {
         f += ln;
-    for (auto& a: rhs.assoc)
+    }
+    for (auto& a: rhs.assoc) {
         assoc.emplace_back(std::move(a));
+    }
     deterministic = false;
 }
 
