@@ -394,6 +394,7 @@ long load(const char *filename) {
 
     printf("Compiling DefineStmt\n");
     for (auto stmt : topo) {
+        printf("%s %s\n", stmt->module->filename.c_str(), stmt->lhs);
         compile(stmt);
     }
     return n_errors;

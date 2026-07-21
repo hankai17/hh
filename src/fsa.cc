@@ -217,6 +217,7 @@ Fsa Fsa::determinize(std::function<void (std::vector<long>&)> relate) const {
         }
     }
 
+    /*
     for (auto &e : m) {
         std::cout << "status: " << e.second << ", contains: ";
         for (auto &v : e.first) {
@@ -224,6 +225,7 @@ Fsa Fsa::determinize(std::function<void (std::vector<long>&)> relate) const {
         }
         std::cout << std::endl;
     }
+    */
     
     return r;
 }

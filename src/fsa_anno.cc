@@ -59,14 +59,25 @@ FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     return r;
 }
 
+/*
+四种基本的状态类型(bracket/collapse/dot/literal) 通过复合操作(concat/union/intersect/difference/start/plus/question) 构建自动机
+eg: ident = [a-z] [0-9]*
+    1 [a-z] → bracket()
+    2 [0-9]* → bracket() + star()
+    两个部分 concat() 连接起来
+    最终得到一个复杂的 FsaAnno，内部状态关联了多个 Expr。
+*/
+
 void FsaAnno::concat(FsaAnno& rhs) {
-    long ln = fsa.n(), rn = rhs.fsa.n();
+    long ln = fsa.n();
+    long rn = rhs.fsa.n();
     for (long f : fsa.finals) {
         fsa.adj[f].emplace(fsa.adj[f].begin(), -1, ln + rhs.fsa.start);
     }
     for (auto& es: rhs.fsa.adj) {
-        for (auto& e: es)
+        for (auto& e: es) {
             e.second += ln;
+        }
         fsa.adj.emplace_back(std::move(es));
     }
     fsa.finals = std::move(rhs.fsa.finals);
@@ -217,7 +228,7 @@ void FsaAnno::union_(FsaAnno& rhs, UnionExpr& expr) {
 
     fsa.start = src;
     for (long f: rhs.fsa.finals) {
-        fsa.finals.push_back(ln+f);
+        fsa.finals.push_back(ln + f);
     }
     for (auto& es: rhs.fsa.adj) {
         fsa.adj.emplace_back(std::move(es));
@@ -241,7 +252,7 @@ void FsaAnno::plus() {
 
 void FsaAnno::question(MaybeExpr& expr) {
     long src = fsa.n();
-    long sink = src+1;
+    long sink = src + 1;
     long old_src = fsa.start;
 
     fsa.start = src;
