@@ -123,7 +123,7 @@ IS  (u|U|l|L)*
 <IN_BRACKET>{
     "]" {
         yy_pop_state(yyscanner);
-        if (my_top_state(yyscanner) == INITIAL) {
+        if (YY_START == INITIAL) {
             return ']';
         }
     }
@@ -135,7 +135,7 @@ IS  (u|U|l|L)*
 <IN_BRACKET_FIRST,IN_BRACKET>{                     // 多状态逗号分隔写法：规则同时对 IN_BRACKET_FIRST、IN_BRACKET 生效
     \\. yylval->integer = yytext[1]; return CHAR;
     - return '-';
-    <<EOF>> unexpected_eof(yylval, "]"); return INVALID_CHARACTER;
+    <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "]");
     "\n" unexpected_newline(yylval, "]"); return INVALID_CHARACTER;
 }
 
@@ -147,29 +147,29 @@ IS  (u|U|l|L)*
     "{" { tmp_bracket += '{'; yy_push_state(IN_BRACE, yyscanner); }
     "}" {
         yy_pop_state(yyscanner);
-        if (my_top_state(yyscanner) == INITIAL) {
+        if (YY_START == INITIAL) {
             yylval->str = new std::string(tmp_bracket);
             return BRACED_CODE;
         }
     }
-    "\n" unexpected_newline(yylval, "}"); return INVALID_CHARACTER;
-    . tmp_bracket += yytext[0];
-    <<EOF>> unexpected_eof(yylval, "}"); return INVALID_CHARACTER;
+    .|"\n" tmp_bracket += yytext[0];
+    <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "}");
 }
 
 "'" tmp_str.clear(); yy_push_state(IN_Q_STRING, yyscanner);
 <IN_Q_STRING>{
     "'" {
         yy_pop_state(yyscanner);
-        if (my_top_state(yyscanner) == INITIAL) {
+        if (YY_START == INITIAL) {
             yylval->str = new std::string(tmp_str);
             return STRING_LITERAL;
         }
+        tmp_bracket += yytext;
     }
-    \\' tmp_str += '\'';
+    \\' tmp_str += '\''; tmp_bracket += yytext;
     \\n unexpected_newline(yylval, "'");
-    . tmp_str += yytext[0];
-    <<EOF>> unexpected_eof(yylval, "'");
+    . tmp_str += yytext[0]; tmp_bracket += yytext;
+    <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "'");
 }
 
 
@@ -177,10 +177,11 @@ IS  (u|U|l|L)*
 <IN_QQ_STRING>{
     "\"" {
         yy_pop_state(yyscanner);
-        if (my_top_state(yyscanner) == INITIAL) {
+        if (YY_START == INITIAL) {
             yylval->str = new std::string(tmp_str);
             return STRING_LITERAL;
         }
+        tmp_bracket += yytext;
     }
     <<EOF>> unexpected_eof(yylval, "\"");
     "\n" unexpected_newline(yylval, "\"");
@@ -194,6 +195,7 @@ IS  (u|U|l|L)*
             return INVALID_CHARACTER;
         }
         tmp_str.push_back(c);
+        tmp_bracket += yytext;
     }
     \\x[0-9a-fA-F]+ {                               // 16进制
         long c = strtol(yytext + 2, NULL, 16);
@@ -202,21 +204,22 @@ IS  (u|U|l|L)*
             return INVALID_CHARACTER;
         }
         tmp_str.push_back(c);
+        tmp_bracket += yytext;
     }
-    \\a tmp_str += '\a';
-    \\b tmp_str += '\b';
-    \\f tmp_str += '\f';
-    \\n tmp_str += '\n';
-    \\r tmp_str += '\r';
-    \\t tmp_str += '\t';
-    \\v tmp_str += '\v';
-    \\[\"\'?\\] tmp_str += yytext[1];
+    \\a tmp_str += '\a'; tmp_bracket += yytext;
+    \\b tmp_str += '\b'; tmp_bracket += yytext;
+    \\f tmp_str += '\f'; tmp_bracket += yytext;
+    \\n tmp_str += '\n'; tmp_bracket += yytext;
+    \\r tmp_str += '\r'; tmp_bracket += yytext;
+    \\t tmp_str += '\t'; tmp_bracket += yytext;
+    \\v tmp_str += '\v'; tmp_bracket += yytext;
+    \\[\"\'?\\] tmp_str += yytext[1]; tmp_bracket += yytext;
     \\. {
         yylval->errmsg = aprintf("Invalied \\-escape: %s", yytext);
         return INVALID_CHARACTER;
     }
-    . tmp_str += yytext[0];
-    <<EOF>> unexpected_eof(yylval, "\""); return INVALID_CHARACTER;
+    . tmp_str += yytext[0]; tmp_bracket += yytext;
+    <<EOF>> unexpected_eof(yylval, "\""); BEGIN INITIAL;
     "\n" unexpected_newline(yylval, "\""); return INVALID_CHARACTER;
 }
 

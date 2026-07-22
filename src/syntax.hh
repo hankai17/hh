@@ -115,6 +115,8 @@ struct RefAction : Visitable<Action, RefAction> {
 // Expr
 struct Expr : VisitableBase<Expr> {                 // 2 Expr 白嫖accept接口 (CRTP典型做法继承自身)
     Location loc;
+    long depth;
+    std::vector<Expr *> anc;
     std::vector<Action *> entering;
     std::vector<Action *> finishing;
     std::vector<Action *> leaving;
@@ -137,6 +139,7 @@ struct BracketExpr : Visitable<Expr, BracketExpr> { // 2.1 CRTP 但还没有实�
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
     std::string qualified;
     std::string ident;
+    DefineStmt *define_stmt = NULL;
 
     CollapseExpr(std::string &qualified, std::string &ident) :
         qualified(std::move(qualified)),
@@ -352,10 +355,6 @@ struct ImportStmt : Visitable<Stmt, ImportStmt> {
 void stmt_free(Stmt *stmt);
 
 // Visitor imp
-struct ExprPrinter : Visitor<Expr> {
-    void visit(Expr &expr) {}
-};
-
 struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     int depth = 0;
 
@@ -407,6 +406,38 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
     // expr
     void visit(Expr &expr) override {
+        if (expr.entering.size()) {
+            printf("%*s%s\n", 2 * depth, "", "@entering");
+            depth++;
+            for (auto a : expr.entering) {
+                a->accept(*this);
+            }
+            depth--;
+        }
+        if (expr.finishing.size()) {
+            printf("%*s%s\n", 2 * depth, "", "@finishing");
+            depth++;
+            for (auto a : expr.finishing) {
+                a->accept(*this);
+            }
+            depth--;
+        }
+        if (expr.leaving.size()) {
+            printf("%*s%s\n", 2 * depth, "", "@leaving");
+            depth++;
+            for (auto a : expr.leaving) {
+                a->accept(*this);
+            }
+            depth--;
+        }
+        if (expr.transiting.size()) {
+            printf("%*s%s\n", 2 * depth, "", "@transiting");
+            depth++;
+            for (auto a : expr.transiting) {
+                a->accept(*this);
+            }
+            depth--;
+        }
         expr.accept(*this);
     }
 

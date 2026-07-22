@@ -25,6 +25,11 @@ bool Fsa::is_final(long x) const {
     return std::binary_search(ALL(finals), x);
 }
 
+bool Fsa::has(long u, long a) const {
+    auto it = std::lower_bound(ALL(adj[u]), std::make_pair(a, 0L));
+    return it != adj[u].end() && it->first == a;
+}
+
 void Fsa::epsilon_closure(std::vector<long> &src) const {   // 计算ε-闭包 // 从一组状态出发，通过任意多次 ε 转移（不消耗输入字符的转移）所能到达的所有状态集合
     std::unordered_set<long> visit { ALL(src) };
     for (long i = 0; i < src.size(); i++) {
@@ -292,7 +297,7 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
     std::set<std::pair<long, long>> refines;
 
     if (x >= 0 || y >= 0) {
-        REP (a, 256) {
+        REP (a, 256 + 1) {
             refines.emplace(a, fy < 0 || fx >= 0 && C[fx] < C[fy] ? fx : fy);
         }
     }
@@ -358,7 +363,7 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
                 R[u] = fu;
                 L[fv] = v;
                 R[v] = fv;
-                REP (a, 256) {                      // ------> 4 分区: 当你分裂一个分区后，这个变化会影响其他字符的判断 所以每个字符都要重新分配分区
+                REP (a, 256 + 1) {                      // ------> 4 分区: 当你分裂一个分区后，这个变化会影响其他字符的判断 所以每个字符都要重新分配分区
                     if (refines.count({a, fy})) {
                         refines.emplace(a, fu != fy ? fu : fv);
                     } else {
@@ -423,5 +428,63 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
         r.adj[i].erase(std::unique(ALL(r.adj[i])), r.adj[i].end());
     }
     return r; 
+}
+
+void Fsa::remove_dead(std::function<void(long)> relate) {
+    std::vector<std::vector<std::pair<long, long>>> radj(n());
+    REP (i, n()) {
+        for (auto &e : adj[i]) {
+            radj[e.second].emplace_back(e.first, i);
+        }
+    }
+    REP (i, n()) {
+        std::sort(ALL(radj[i]));
+    }
+    std::vector<long> q = finals, id(n(), 0);
+    for (long f : finals) {
+        id[f] = 1;
+    }
+    REP (i, q.size()) {
+        long u = q[i];
+        for (auto &e : radj[u]) {
+            if (!id[e.second]) {
+                id[e.second] = 1;
+                q.push_back(e.second);
+            }
+        }
+    }
+    id[start] = 1;
+    long j = 0;
+    REP (i, n()) {
+        id[i] = id[i] ? j++ : -1;
+    }
+    auto it = finals.begin();
+    auto it2 = it;
+    REP (i, n()) {
+        if (id[i] >= 0) {
+            relate(i);
+            if (start == i) {
+                start = id[i];
+            }
+            while (it != finals.end() && *it < i) {
+                ++it;
+            }
+            if (it != finals.end() && *it == i) {
+                *it2++ = id[i];
+            }
+            long k = 0;
+            for (auto &e : adj[i]) {
+                if (id[e.second] >= 0) {
+                    adj[i][k++] = { e.first, id[e.second] };
+                }
+            }
+            adj[i].resize(k);
+            if (id[i] != i) {
+                adj[id[i]] = std::move(adj[i]);
+            }
+        }
+    }
+    finals.erase(it2, finals.end());
+    adj.resize(j);
 }
 

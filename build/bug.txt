@@ -1,5 +1,7 @@
 number = [0]
 op = '='
-#expr_atom = !op number
-expr_atom = number !op
+export expr_atom = number !op
+
+import "3.txt"
+c = b3
 

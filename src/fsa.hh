@@ -11,6 +11,7 @@ struct Fsa {
 
     long n() const { return adj.size(); }
     bool is_final(long x) const;
+    bool has(long u, long a) const;
     void epsilon_closure(std::vector<long> &src) const;
 
     Fsa operator~() const;
@@ -18,5 +19,6 @@ struct Fsa {
     Fsa intersect(const Fsa &rhs, std::function<void (long, long)> relate) const;
     Fsa determinize(std::function<void (std::vector<long>&)> relate) const;
     Fsa hopcroft_minimize(std::function<void (std::vector<long>&)> relate);
+    void remove_dead(std::function<void(long)> relate);
 };
 

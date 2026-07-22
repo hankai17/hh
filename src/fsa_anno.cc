@@ -139,6 +139,13 @@ void FsaAnno::difference(FsaAnno& rhs) {
     }
     fsa = fsa.difference(rhs.fsa, relate);
     assoc = std::move(new_assoc);
+    /*
+    auto relate2 = [&] (long x) {
+        new_assoc.emplace_back(assoc[x]);
+    };
+    fsa.remove_dead(relate2);
+    assoc = std::move(new_assoc);
+    */
     deterministic = true;
 }
 
@@ -172,7 +179,7 @@ void FsaAnno::intersect(FsaAnno& rhs) {
             a.insert(a.end(), ALL(rhs.assoc[y]));
         else
             for (long v: rel1[y])
-                a.insert(a.end(), ALL(assoc[v]));
+                a.insert(a.end(), ALL(rhs.assoc[v]));
         std::sort(ALL(a));
         a.erase(std::unique(ALL(a)), a.end());
     };
@@ -182,6 +189,10 @@ void FsaAnno::intersect(FsaAnno& rhs) {
         rhs.fsa = rhs.fsa.determinize(relate1);
     fsa = fsa.intersect(rhs.fsa, relate);
     assoc = std::move(new_assoc);
+    auto relate2 = [&] (long x) {
+        new_assoc.emplace_back(assoc[x]);
+    };
+    fsa.remove_dead(relate2);
     deterministic = true;
 }
 
@@ -202,35 +213,18 @@ void FsaAnno::minimize() {
 }
 
 void FsaAnno::union_(FsaAnno& rhs, UnionExpr& expr) {
-    std::vector<std::vector<Expr*>> new_assoc;
-    std::vector<std::vector<long>> rel0, rel1;
-    //auto relate0 = [&](vector<long>& xs) {
-    //  rel0.emplace_back(move(xs));
-    //};
-    //auto relate1 = [&](vector<long>& xs) {
-    //  rel1.emplace_back(move(xs));
-    //};
-    //auto relate = [&](vector<long>& xs, vector<long>& ys, bool flag) {
-    //  new_assoc.emplace_back();
-    //  vector<Expr*>& a = new_assoc.back();
-    //  for (long x: xs)
-    //    a.insert(a.end(), ALL(assoc[x]));
-    //  for (long y: ys)
-    //    a.insert(a.end(), ALL(assoc[y]));
-    //  sort(ALL(a));
-    //  a.erase(unique(ALL(a)), a.end());
-    //};
-
     long ln = fsa.n();
     long rn = rhs.fsa.n();
-    long src = ln+rn;
+    long src = ln + rn;
     long old_lsrc = fsa.start;
-
     fsa.start = src;
     for (long f: rhs.fsa.finals) {
         fsa.finals.push_back(ln + f);
     }
-    for (auto& es: rhs.fsa.adj) {
+    for (auto &es : rhs.fsa.adj) {
+        for (auto &e : es) {
+            e.second += ln;
+        }
         fsa.adj.emplace_back(std::move(es));
     }
     fsa.adj.emplace_back();

@@ -185,10 +185,10 @@ factor:                                             // 基础因子
     | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
     | bracket { $$ = new BracketExpr($1); }         // bracket类型 创建的AST实例类型是BracketExpr   eg: [a-z]
     | '(' union_expr ')' { $$ = $2; }
-    | factor '>' action { $$ = $1; $1->entering.push_back($3); }
-    | factor '@' action { $$ = $1; $1->finishing.push_back($3); }
-    | factor '%' action { $$ = $1; $1->leaving.push_back($3); }
-    | factor '$' action { $$ = $1; $1->transiting.push_back($3); }
+    | factor '>' action { $$ = $1; $$->entering.push_back($3); }
+    | factor '@' action { $$ = $1; $$->finishing.push_back($3); }
+    | factor '%' action { $$ = $1; $$->leaving.push_back($3); }
+    | factor '$' action { $$ = $1; $$->transiting.push_back($3); }
     | factor '?' { $$ = new MaybeExpr($1); }
     | factor '*' { $$ = new ClosureExpr($1); }
     | factor '+' { $$ = new PlusExpr($1); }         // 

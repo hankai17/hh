@@ -1,0 +1,2 @@
+import "3.txt"
+c = b3

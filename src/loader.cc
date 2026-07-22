@@ -138,18 +138,37 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
                 mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified.c_str());
-            } else if (!mod.qualified_import[expr.qualified]->defined.count(expr.ident)) {
-                n_errors++;
-                mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified.c_str(), expr.ident.c_str());
+            } else {
+                auto it = mod.qualified_import[expr.qualified]->defined.find(expr.ident);
+                if (it == mod.qualified_import[expr.qualified]->defined.end()) {
+                    n_errors++;
+                    mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified.c_str(), expr.ident.c_str());
+                } else {
+                    expr.define_stmt = it->second;
+                }
             }
         } else {
-            long c = mod.defined.count(expr.ident);
-            for (auto &it : mod.unqualified_import) {
-                c += it->defined.count(expr.ident);
+            auto it = mod.defined.find(expr.ident);
+            bool found = it != mod.defined.end();
+            for (auto &import : mod.unqualified_import) {
+                auto it2 = import->defined.find(expr.ident);
+                if (it2 != import->defined.end()) {
+                    if (found) {
+                        n_errors++;
+                        mod.locfile.locate(expr.loc, "'%s' redefined in unqualified import %s\n",
+                                expr.ident.c_str(),
+                                import->filename.c_str());
+                    } else {
+                        it = it2;
+                        found = true;
+                    }
+                }
             }
-            if (!c) {
+            if (!found) {
                 n_errors++;
                 mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident.c_str());
+            } else {
+                expr.define_stmt = it->second;
             }
         }
     }
@@ -192,7 +211,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
                 n_errors++;
                 mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident.c_str());
             } else {
-                depended_by[it->second].push_back(define_stmt);
+                depended_by[it->second].push_back(define_stmt); // 被依赖
                 expr.define_stmt = it->second;
             }
         }
@@ -292,15 +311,8 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
             }
             st.push_back(st[i - 1]);
             for (; i < st.size(); i++) {
-                long line1;
-                long _line2;
-                long col1;
-                long col2;
-                //st[i]->module->locfile.locate(st[i]->loc, line1, col1, _line2, col2);
-                fprintf(stderr, "%s: %ld:%ld-%ld: required by %s\n",
-                        st[i]->module->locfile.filename.c_str(),
-                        line1 + 1, col1 + 1, col2, st[i]->lhs.c_str());
-                //st[i]->module->locfile.context(st[i]->loc);
+                st[i]->module->locfile.locate(st[i]->loc, "required by %s",
+                        st[i]->lhs.c_str());
             }
             fputs("\n", stderr);
             return true;
@@ -336,7 +348,7 @@ long load(const std::string &filename) {
         return n_errors;
     }
 
-    printf("Processing import & def\n");
+    printf("\nProcessing import & def\n");
     for (;;) {
         bool done = true;
         for (auto &it : inode2module) {                     // 2 ModuleImportDef(能接所有语句) 根据基本的AST 构建完整的AST以及依赖关系
@@ -358,7 +370,7 @@ long load(const std::string &filename) {
         return n_errors; 
     }
 
-    printf("Processing use\n");
+    printf("\nProcessing use\n");
     for (auto &it : inode2module) {
         Module &mod = it.second;
         ModuleUse p { mod, n_errors };                      // 3 检查变量以及引用 是否正确
@@ -388,16 +400,25 @@ long load(const std::string &filename) {
         }
     }
 
-    printf("Topological sorting\n");
+    printf("\nTopological sorting\n");
     std::vector<DefineStmt*> topo = topo_define_stmts(n_errors);
     if (n_errors) {
         return n_errors; 
     }
 
-    printf("Compiling DefineStmt\n");
+    printf("\nCompiling DefineStmt\n");
     for (auto stmt : topo) {
-        printf("%s %s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
+        printf("%s->%s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
         compile(stmt);
+    }
+
+    printf("\nOutput\n");
+    for (Stmt *x = mod->toplevel; x; x = x->next) {
+        if (auto xx = dynamic_cast<DefineStmt*>(x)) {
+            if (xx->export_) {
+                export_statement(xx);
+            }
+        }
     }
     return n_errors;
 }
