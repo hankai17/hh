@@ -14,7 +14,7 @@ struct Module {
     std::map<std::string, std::string> named_action;
 };
 
-long load(const char *filename);
-Module *load_module(long &n_errors, const char *filename);
+long load(const std::string &filename);
+Module *load_module(long &n_errors, const std::string &filename);
 void unload_all();
 

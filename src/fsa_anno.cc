@@ -25,10 +25,12 @@ FsaAnno FsaAnno::bracket(BracketExpr &expr) {
 FsaAnno FsaAnno::collapse(CollapseExpr &expr) {
     FsaAnno r;
     r.fsa.start = 0;
-    r.fsa.finals = {0};
-    r.assoc.assign(1, {&expr});
+    r.fsa.finals = {1};
+    r.fsa.adj.assign(2, {});
+    r.fsa.adj[0].emplace_back(256, 1);
+    r.assoc.assign(2, {&expr});
     r.deterministic = true;
-    return r; 
+    return r;
 }
 
 FsaAnno FsaAnno::dot(DotExpr &expr) {
@@ -47,14 +49,12 @@ FsaAnno FsaAnno::dot(DotExpr &expr) {
 FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     FsaAnno r;
     r.fsa.start = 0;
-    //r.fsa.finals.assign(1, expr.literal.size());
-    r.fsa.finals.assign(1, strlen(expr.literal));
-    //r.fsa.adj.assign(expr.literal.size() + 1, {});
-    r.fsa.adj.assign(strlen(expr.literal) + 1, {});
-    REP (i, strlen(expr.literal)) {
+    r.fsa.finals.assign(1, expr.literal.size());
+    r.fsa.adj.assign(expr.literal.size() + 1, {});
+    REP (i, expr.literal.size()) {
         r.fsa.adj[i].emplace_back((unsigned char)expr.literal[i], i + 1);
     }
-    r.assoc.assign(strlen(expr.literal) + 1, {&expr});
+    r.assoc.assign(expr.literal.size() + 1, {&expr});
     r.deterministic = true;
     return r;
 }

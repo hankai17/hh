@@ -6,13 +6,10 @@ string = "'" [^']* "'"
 literal = number | string
 
 op = '=' | '!=' | '<' | '>' | '<=' | '>=' | 'like' | 'LIKE'
-expr_atom = ident opt_ws op opt_ws ( literal | '(' opt_ws !select_stmt opt_ws ')' )
-#expr = expr_atom ( opt_ws ('AND' | 'and' | 'OR' | 'or') ws !expr )?
-#
-#select_clause = ('SELECT' | 'select') ws ( '*' | ident ( opt_ws ',' opt_ws ident )* )
-#from_clause   = ('FROM' | 'from') ws ident
-#where_clause  = ('WHERE' | 'where') ws !expr
-#
-#export select_stmt = select_clause ws from_clause ( ws where_clause )?
+#expr_atom = ident opt_ws op opt_ws ( literal | '(' opt_ws !select_stmt opt_ws ')' )
+expr_atom = ident opt_ws op opt_ws ( literal | '(' opt_ws !op opt_ws ')' )
+
+#select_clause = ('SELECT' | 'select') ws
+#export select_stmt = select_clause
 
 

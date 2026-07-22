@@ -91,7 +91,7 @@ IS  (u|U|l|L)*
 
 {L}({L}|{D})* {                                     // 匹配abc123 存到string里并返回IDENT
     //printf("DEBUG: IDENT recognized: '%s'\n", yytext);
-    yylval->string = strdup(yytext);
+    yylval->str = new std::string(yytext);
     return IDENT;
 }
 
@@ -148,7 +148,7 @@ IS  (u|U|l|L)*
     "}" {
         yy_pop_state(yyscanner);
         if (my_top_state(yyscanner) == INITIAL) {
-            yylval->string = strdup(tmp_bracket.c_str());
+            yylval->str = new std::string(tmp_bracket);
             return BRACED_CODE;
         }
     }
@@ -162,7 +162,7 @@ IS  (u|U|l|L)*
     "'" {
         yy_pop_state(yyscanner);
         if (my_top_state(yyscanner) == INITIAL) {
-            yylval->string = strdup(tmp_str.c_str());
+            yylval->str = new std::string(tmp_str);
             return STRING_LITERAL;
         }
     }
@@ -178,7 +178,7 @@ IS  (u|U|l|L)*
     "\"" {
         yy_pop_state(yyscanner);
         if (my_top_state(yyscanner) == INITIAL) {
-            yylval->string = strdup(tmp_str.c_str());
+            yylval->str = new std::string(tmp_str);
             return STRING_LITERAL;
         }
     }

@@ -39,7 +39,7 @@ int parse(const LocationFile &locfile, Stmt *&res);
                                                     // 值类型 %union // yylval 可以携带的不同数据类型
 %union {
     long integer;                                   // yylval可存储 INTEGER、CHAR
-    char *string;                                   // yylval可存储 IDENT、STRING_LITERAL、BRACED_CODE
+    std::string *str;                                   // yylval可存储 IDENT、STRING_LITERAL、BRACED_CODE
     bitset<256> *charset;                           // yylval可存储 字符集 [...]
     Action *action;
     Expr *expr;                                     // yylval可存储 抽象语法树节点
@@ -47,6 +47,7 @@ int parse(const LocationFile &locfile, Stmt *&res);
     char *errmsg;
 }
 
+%destructor { delete $$; } <str>
 %destructor { free($$); }  <string>
 %destructor { delete $$; } <action>
 %destructor { delete $$; } <expr>
@@ -56,9 +57,9 @@ int parse(const LocationFile &locfile, Stmt *&res);
                                                     // Token(lexer解析而得) 声明 // 告诉 Bison 哪些 token(终结符) 有值，以及值的类型
 %token ACTION AS EXPORT IMPORT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
-%token <string> IDENT
-%token <string> STRING_LITERAL
-%token <string> BRACED_CODE
+%token <str> IDENT
+%token <str> STRING_LITERAL
+%token <str> BRACED_CODE
 
 %nonassoc IDENT                                     // 声明这些 Token 没有结合性（Non-associative) eg: 不允许 ab cd 这种隐式连接
 %nonassoc '.'                                       // 限制点运算符不能连续（如 a..b 是非法的）
@@ -152,11 +153,11 @@ stmt_list:                                          // 支持空列表 + 链表�
     }
 
 stmt:                                               // 支持两种语句: 普通赋值：x = expr; 初始化赋值：x := expr;
-    IDENT '=' union_expr { $$ = new DefineStmt(false, $1, $3); $$->loc = yyloc; }
-    | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, $2, $4); $$->loc = yyloc; }
-    | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt($2, $4); $$->loc = yyloc; }
-    | IMPORT STRING_LITERAL { $$ = new ImportStmt($2, NULL); $$->loc = yyloc; }
-    | ACTION IDENT BRACED_CODE { $$ = new ActionStmt($2, $3); $$->loc = yyloc; }
+    IDENT '=' union_expr { $$ = new DefineStmt(false, *$1, $3); delete $1; $$->loc = yyloc; }
+    | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, *$2, $4); delete $2; $$->loc = yyloc; }
+    | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
+    | IMPORT STRING_LITERAL { std::string t; $$ = new ImportStmt(*$2, t); delete $2; $$->loc = yyloc; }
+    | ACTION IDENT BRACED_CODE { $$ = new ActionStmt(*$2, *$3); delete $2; delete $3; $$->loc = yyloc; }
     | error {}
 
 union_expr:                                         // 并集  ab即a后边跟着b即ab就是并集
@@ -176,11 +177,11 @@ concat_expr:                                        // 链接
     | concat_expr factor { $$ = new ConcatExpr($1, $2); }
 
 factor:                                             // 基础因子
-    IDENT { $$ = new EmbedExpr(NULL, $1); $$->loc = yyloc; }         // IDENT类型 创建的AST实例类型是EmbedExpr       eg: abc
-    | IDENT SEMISEMI IDENT { $$ = new EmbedExpr($1, $3); $$->loc = yyloc; }
-    | '!' IDENT { $$ = new CollapseExpr(NULL, $2); $$->loc = yyloc; }// &IDENT ...                                   eg: &ref
-    | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); $$->loc = yyloc; }   // ?
-    | STRING_LITERAL { $$ = new LiteralExpr($1); $$->loc = yyloc; }
+    IDENT { std::string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }         // IDENT类型 创建的AST实例类型是EmbedExpr       eg: abc
+    | IDENT SEMISEMI IDENT { $$ = new EmbedExpr(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
+    | '!' IDENT { std::string t; $$ = new CollapseExpr(t, *$2); delete $2; $$->loc = yyloc; }// &IDENT ...                                   eg: &ref
+    | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }   // ?
+    | STRING_LITERAL { $$ = new LiteralExpr(*$1); delete $1; $$->loc = yyloc; }
     | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
     | bracket { $$ = new BracketExpr($1); }         // bracket类型 创建的AST实例类型是BracketExpr   eg: [a-z]
     | '(' union_expr ')' { $$ = $2; }
@@ -193,8 +194,8 @@ factor:                                             // 基础因子
     | factor '+' { $$ = new PlusExpr($1); }         // 
 
 action:
-    IDENT { $$ = new RefAction($1); $$->loc = yyloc; }
-    | BRACED_CODE { $$ = new InlineAction($1); $$->loc = yyloc; }
+    IDENT { $$ = new RefAction(*$1); delete $1; $$->loc = yyloc; }
+    | BRACED_CODE { $$ = new InlineAction(*$1); delete $1; $$->loc = yyloc; }
 
 bracket:                                            // 字符集
     '[' bracket_items ']' {                         // bracket_items { $$ = $1;

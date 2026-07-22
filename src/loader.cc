@@ -61,7 +61,7 @@ struct ModuleImportDef : PreorderStmtVisitor {
 #endif
         if (mod.named_action.count(stmt.ident)) {
             n_errors++;
-            mod.locfile.locate(stmt.loc, "Redefined '%s'\n", stmt.ident);
+            mod.locfile.locate(stmt.loc, "Redefined '%s'\n", stmt.ident.c_str());
         }
         mod.named_action[stmt.ident] = stmt.code;
     }
@@ -86,11 +86,11 @@ struct ModuleImportDef : PreorderStmtVisitor {
 #endif
         if (!m) {
             n_errors++;
-            mod.locfile.locate(stmt.loc, "'%s' : %s", stmt.filename,
+            mod.locfile.locate(stmt.loc, "'%s' : %s", stmt.filename.c_str(),
                     errno ? strerror(errno) : "parse error");
             return;
         }
-        if (stmt.qualified) {                                           // 2.2.2 加载新文件 保存到当前mod里
+        if (stmt.qualified.size()) {                                           // 2.2.2 加载新文件 保存到当前mod里
             mod.qualified_import[stmt.qualified] = m;                   // 2.2.3 有限定符 保存到当前mod的qualified_import里 eg: import file as f
         } else if (std::count(ALL(mod.unqualified_import), m) == 0) {   // 2.2.3 无限定符 保存到当前mod的unqualified_import里 eg: import file
             mod.unqualified_import.push_back(m);
@@ -134,13 +134,13 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
 #ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor CollapseExpr\n" << std::endl;
 #endif
-        if (expr.qualified) {
+        if (expr.qualified.size()) {
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
-                mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
+                mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified.c_str());
             } else if (!mod.qualified_import[expr.qualified]->defined.count(expr.ident)) {
                 n_errors++;
-                mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
+                mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified.c_str(), expr.ident.c_str());
             }
         } else {
             long c = mod.defined.count(expr.ident);
@@ -149,7 +149,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
             }
             if (!c) {
                 n_errors++;
-                mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
+                mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident.c_str());
             }
         }
     }
@@ -158,17 +158,18 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
 #ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor EmbedExpr\n" << std::endl;
 #endif
-        if (expr.qualified) {                                   // 限定符场景
+        if (expr.qualified.size()) {                                   // 限定符场景
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
-                mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified);
+                mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified.c_str());
             } else {
                 auto it = mod.qualified_import[expr.qualified]->defined.find(expr.ident);
                 if (it == mod.qualified_import[expr.qualified]->defined.end()) {
                     n_errors++;
-                    mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified, expr.ident);
+                    mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified.c_str(), expr.ident.c_str());
                 } else {
                     depended_by[it->second].push_back(define_stmt);
+                    expr.define_stmt = it->second;
                 }
             }
         } else {                                                // 无限定符场景 或 一般场景
@@ -180,7 +181,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
                     if (found) {
                         n_errors++;
                         mod.locfile.locate(expr.loc, "'%s' redefined in unqualified import %s\n",
-                                expr.ident, import->filename.c_str());
+                                expr.ident.c_str(), import->filename.c_str());
                     } else {
                         it = it2;
                         found = true;
@@ -189,9 +190,10 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
             }
             if (!found) {
                 n_errors++;
-                mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident);
+                mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident.c_str());
             } else {
                 depended_by[it->second].push_back(define_stmt);
+                expr.define_stmt = it->second;
             }
         }
     }
@@ -219,17 +221,18 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     }
 };
 
-Module *load_module(long &n_errors, const char *filename) {
+Module *load_module(long &n_errors, const std::string &filename) {
     std::pair<dev_t, ino_t> inode {0, 0};
-    FILE *file = strcmp(filename, "-") ? fopen(filename, "r") : stdin;
+    FILE *file = filename != "-" ? fopen(filename.c_str(), "r") : stdin;
     if (!file) {
+        n_errors++;
         return NULL;
     }
 
     if (file != stdin) {
         struct stat st;
         if (fstat(fileno(file), &st) < 0) {
-            err_exit(EX_OSFILE, "fstat  '%s'", filename);
+            err_exit(EX_OSFILE, "fstat  '%s'", filename.c_str());
         }
         inode = { st.st_dev, st.st_ino };
     }
@@ -238,6 +241,7 @@ Module *load_module(long &n_errors, const char *filename) {
         return &inode2module[inode];
     }
 
+    Module &mod = inode2module[inode];
     std::string module { file != stdin ? filename : "main" };
     std::string::size_type t = module.find('.');
 
@@ -259,16 +263,15 @@ Module *load_module(long &n_errors, const char *filename) {
     }
 
     LocationFile locfile(filename, data);
+    mod.locfile = locfile;
+    mod.filename = filename;
     Stmt *toplevel = NULL;
     long errors = parse(locfile, toplevel);
     if (!toplevel) {
         n_errors += errors;
+        mod.toplevel = NULL;
         return NULL;
     }
-
-    Module &mod = inode2module[inode];
-    mod.locfile = locfile;
-    mod.filename = filename;
     mod.toplevel = toplevel;                                    // 1.1 toplevel 可能是 parser.y 中 stmt: 下 定义的那三种stmt
     return &mod;
 }
@@ -282,7 +285,7 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
             return false;
         }
         if (vis[u] == 1) {
-            u->module->locfile.locate(u->loc, "'%s': circular embedding", u->lhs);
+            u->module->locfile.locate(u->loc, "'%s': circular embedding", u->lhs.c_str());
             long i = st.size();
             while (st[i - 1] != u) {
                 i--;
@@ -296,10 +299,7 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
                 //st[i]->module->locfile.locate(st[i]->loc, line1, col1, _line2, col2);
                 fprintf(stderr, "%s: %ld:%ld-%ld: required by %s\n",
                         st[i]->module->locfile.filename.c_str(),
-                        line1 + 1,
-                        col1 + 1,
-                        col2,
-                        st[i]->lhs);
+                        line1 + 1, col1 + 1, col2, st[i]->lhs.c_str());
                 //st[i]->module->locfile.context(st[i]->loc);
             }
             fputs("\n", stderr);
@@ -327,10 +327,12 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
     return topo;
 }
 
-long load(const char *filename) {
+long load(const std::string &filename) {
     long n_errors = 0;
 
-    if (!load_module(n_errors, filename)) {                 // 1 加载首文件 构建基本的(第一个)AST
+    Module *mod = load_module(n_errors, filename);
+    if (!mod) {                 // 1 加载首文件 构建基本的(第一个)AST
+        err_exit(EX_OSFILE, "open", filename.c_str());
         return n_errors;
     }
 
@@ -394,7 +396,7 @@ long load(const char *filename) {
 
     printf("Compiling DefineStmt\n");
     for (auto stmt : topo) {
-        printf("%s %s\n", stmt->module->filename.c_str(), stmt->lhs);
+        printf("%s %s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
         compile(stmt);
     }
     return n_errors;

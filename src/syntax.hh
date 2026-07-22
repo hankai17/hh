@@ -3,6 +3,7 @@
 #include "location.hh"
 #include <bitset>
 #include <vector>
+#include <string>
 
 //#define DEBUG_CLS 0
 
@@ -90,26 +91,24 @@ struct Action: VisitableBase<Action> {
 };
 
 struct InlineAction: Visitable<Action, InlineAction> {
-    char *code;
-    InlineAction(char *code) : code(code) {
+    std::string code;
+    InlineAction(std::string &code) : code(std::move(code)) {
 #ifdef DEBUG_CLS 
         printf("new InlineAction\n");
 #endif
     }
     ~InlineAction() {
-        free(code);
     }
 };
 
 struct RefAction : Visitable<Action, RefAction> {
-    char *ident;
-    RefAction(char *ident) : ident(ident) {
+    std::string ident;
+    RefAction(std::string &ident) : ident(std::move(ident)) {
 #ifdef DEBUG_CLS 
         printf("new RefAction\n");
 #endif
     }
     ~RefAction() {
-        free(ident);
     }
 };
 
@@ -136,12 +135,12 @@ struct BracketExpr : Visitable<Expr, BracketExpr> { // 2.1 CRTP 但还没有实�
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
-    char *qualified;
-    char *ident;
+    std::string qualified;
+    std::string ident;
 
-    CollapseExpr(char *qualified, char *ident) :
-        qualified(qualified),
-        ident(ident) {
+    CollapseExpr(std::string &qualified, std::string &ident) :
+        qualified(std::move(qualified)),
+        ident(std::move(ident)) {
 #ifdef DEBUG_CLS 
         printf("new CollapseExpr: qualified: %s, ident: %s\n",
                 qualified, ident);
@@ -149,8 +148,6 @@ struct CollapseExpr : Visitable<Expr, CollapseExpr> {
     }
 
     ~CollapseExpr() {
-        free(qualified);
-        free(ident);
     }
 };
 
@@ -200,13 +197,13 @@ struct DotExpr : Visitable<Expr, DotExpr> {
 
 
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
-    char *qualified;
-    char *ident;
+    std::string qualified;
+    std::string ident;
     DefineStmt *define_stmt = NULL;
 
-    EmbedExpr(char *qualified, char *ident) :
-        qualified(qualified),
-        ident(ident) {
+    EmbedExpr(std::string &qualified, std::string &ident) :
+        qualified(std::move(qualified)),
+        ident(std::move(ident)) {
 #ifdef DEBUG_CLS 
         printf("new EmbedExpr: qualified: %s, ident: %s\n",
                 qualified, ident);
@@ -214,8 +211,6 @@ struct EmbedExpr : Visitable<Expr, EmbedExpr> {
     }
 
     ~EmbedExpr() {
-        free(qualified);
-        free(ident);
     }
 };
 
@@ -235,10 +230,10 @@ struct IntersectExpr : Visitable<Expr, IntersectExpr> {
 };
 
 struct LiteralExpr : Visitable<Expr, LiteralExpr> {
-    char *literal;
+    std::string literal;
 
-    LiteralExpr(char *literal) :
-        literal(literal) {
+    LiteralExpr(std::string &literal) :
+        literal(std::move(literal)) {
 #ifdef DEBUG_CLS 
         printf("new LiteralExpr: literal: %s\n",
                 literal);
@@ -246,7 +241,6 @@ struct LiteralExpr : Visitable<Expr, LiteralExpr> {
     }
 
     ~LiteralExpr() {
-        free(literal);
     }
 };
 
@@ -300,12 +294,12 @@ struct Stmt {
 struct EmptyStmt : Visitable<Stmt, EmptyStmt> {};                   // 常用于占位或分号单独成句的情况 eg: ;
 
 struct ActionStmt : Visitable<Stmt, ActionStmt> {
-    char *ident;
-    char *code;
+    std::string ident;
+    std::string code;
 
-    ActionStmt(char *ident, char *code) :
-        ident(ident),
-        code(code) {
+    ActionStmt(std::string &ident, std::string &code) :
+        ident(std::move(ident)),
+        code(std::move(code)) {
 #ifdef DEBUG_CLS 
         printf("new ActionStmt: ident: %s, code: %s\n",
                 ident, code);
@@ -313,21 +307,19 @@ struct ActionStmt : Visitable<Stmt, ActionStmt> {
     }
 
     ~ActionStmt() {
-        free(ident);
-        free(code);
     }
 };
 
 struct Module;
-struct DefineStmt : Visitable<Stmt, DefineStmt> {                   // x = 5 + 3;
+struct DefineStmt : Visitable<Stmt, DefineStmt> {
     bool export_;
-    char *lhs;  // 左值（变量名）
-    Expr *rhs;  // 右值（表达式
+    std::string lhs;
+    Expr *rhs;
     Module *module;
 
-    DefineStmt(bool export_, char *lhs, Expr *rhs) :
+    DefineStmt(bool export_, std::string &lhs, Expr *rhs) :
         export_(export_),
-        lhs(lhs),
+        lhs(std::move(lhs)),
         rhs(rhs) {
 #ifdef DEBUG_CLS 
         printf("new DefineStmt: lhs: %s, rhs: TODO\n",
@@ -336,18 +328,17 @@ struct DefineStmt : Visitable<Stmt, DefineStmt> {                   // x = 5 + 3
     }
 
     ~DefineStmt() {
-        free(lhs);
         delete rhs;
     }
 };
 
 struct ImportStmt : Visitable<Stmt, ImportStmt> {
-    char *filename;
-    char *qualified;
+    std::string filename;
+    std::string qualified;
 
-    ImportStmt(char *filename, char *qualified) :
-        filename(filename),
-        qualified(qualified) {
+    ImportStmt(std::string &filename, std::string &qualified) :
+        filename(std::move(filename)),
+        qualified(std::move(qualified)) {
 #ifdef DEBUG_CLS 
         printf("new ImportStmt: filename: %s, qualified: %s\n",
                 filename, qualified);
@@ -355,8 +346,6 @@ struct ImportStmt : Visitable<Stmt, ImportStmt> {
     }
 
     ~ImportStmt() {
-        free(filename);
-        free(qualified);
     }
 };
 
@@ -377,12 +366,12 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
     void visit(InlineAction &action) override {
         printf("%*s%s\n", 2 * depth, "", "InlineAction");
-        printf("%*s%s\n", 2 * (depth + 1), "", action.code);
+        printf("%*s%s\n", 2 * (depth + 1), "", action.code.c_str());
     }
 
     void visit(RefAction &action) override {
         printf("%*s%s\n", 2 * depth, "", "RefAction");
-        printf("%*s%s\n", 2 * (depth + 1), "", action.ident);
+        printf("%*s%s\n", 2 * (depth + 1), "", action.ident.c_str());
     }
 
     // stmt
@@ -393,15 +382,15 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     void visit(DefineStmt &stmt) override {
         printf("%*s%s\n", 2 * depth, "", "DefineStmt");
         depth++;
-        printf("%*s%s\n", 2 * depth, "", stmt.lhs);
+        printf("%*s%s\n", 2 * depth, "", stmt.lhs.c_str());
         visit(*stmt.rhs);
         depth--;
     }
 
     void visit(ActionStmt &stmt) override {
         printf("%*s%s\n", 2 * depth, "", "ActionStmt");
-        printf("%*s%s\n", 2 * (depth + 1), "", stmt.ident);
-        printf("%*s%s\n", 2 * (depth + 1), "", stmt.code);
+        printf("%*s%s\n", 2 * (depth + 1), "", stmt.ident.c_str());
+        printf("%*s%s\n", 2 * (depth + 1), "", stmt.code.c_str());
     }
 
     void visit(EmptyStmt &stmt) override {
@@ -410,9 +399,9 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
     void visit(ImportStmt &stmt) override {
         printf("%*s%s\n", 2 * depth, "", "ImportStmt");
-        printf("%*s%s\n", 2 * (depth + 1), "", stmt.filename);
-        if (stmt.qualified) {
-            printf("%*sas %s\n", 2 * (depth + 1), "", stmt.qualified);
+        printf("%*s%s\n", 2 * (depth + 1), "", stmt.filename.c_str());
+        if (stmt.qualified.size()) {
+            printf("%*sas %s\n", 2 * (depth + 1), "", stmt.qualified.c_str());
         }
     }
 
@@ -446,10 +435,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     void visit(CollapseExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "CollapseExpr");
         printf("%*s", 2 * (depth + 1), "");
-        if (expr.qualified) {
-            printf("%s.%s\n", expr.qualified, expr.ident);
+        if (expr.qualified.size()) {
+            printf("%s.%s\n", expr.qualified, expr.ident.c_str());
         } else {
-            printf("%s\n", expr.ident);
+            printf("%s\n", expr.ident.c_str());
         }
     }
 
@@ -476,10 +465,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     void visit(EmbedExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "EmbedExpr");
         printf("%*s", 2 * (depth + 1), "");
-        if (expr.qualified) {
-            printf("%s.%s\n", expr.qualified, expr.ident);
+        if (expr.qualified.size()) {
+            printf("%s.%s\n", expr.qualified, expr.ident.c_str());
         } else {
-            printf("%s\n", expr.ident);
+            printf("%s\n", expr.ident.c_str());
         }
     }
 
@@ -493,7 +482,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
     void visit(LiteralExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "LiteralExpr");
-        printf("%*s%s\n", 2 * (depth + 1), "", expr.literal);
+        printf("%*s%s\n", 2 * (depth + 1), "", expr.literal.c_str());
     }
 
     void visit(MaybeExpr &expr) override {

@@ -140,12 +140,12 @@ Fsa Fsa::difference(const Fsa &rhs, std::function<void (long, long)> relate) con
                 ++it1;
             }
             long v1 = it1 != it1e &&
-                    it1->first == it1e->first ?  it1->second : rhs.n();
+                    it1->first == it0->first ?  it1->second : rhs.n();
             long t = (rhs.n() + 1) * it0->second + v1;
             auto mit = m.find(t);
             if (mit == m.end()) {
                 mit = m.emplace(t, m.size()).first;
-                q.emplace_back(it0->second, it1->second);
+                q.emplace_back(it0->second, v1);
             }
             r.adj[i].emplace_back(it0->first, mit->second);
         }
@@ -163,7 +163,8 @@ Fsa Fsa::determinize(std::function<void (std::vector<long>&)> relate) const {
     m[q[0]] = 0;                                                    // 设置状态为 0
     r.start = 0;
     REP (i, q.size()) {
-        relate(q[i]);
+        std::vector<long> rel = q[i];
+        relate(rel);
         bool final = false;
         for (long u : q[i]) {
             if (std::binary_search(ALL(finals), u)) {
@@ -245,7 +246,7 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
     std::vector<long> R(n());
     std::vector<long> B(n());
     std::vector<long> C(n(), 0);
-    std::vector<long> CC(n());
+    std::vector<long> CC(n(), 0);
     std::vector<bool> mark(n(), false);
 
     long fx = -1;
@@ -328,10 +329,11 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
 
                 for (long i = fy;;) {               // ------> 2.2 遍历整个非终止态 eg: 从A态开始遍历
                     if (mark[i]) {                  // ------> 2.2.1 A态是这个a字符所依赖的状态
+                        mark[i] = false;
                         if (u < 0) {
                             C[fu = i] = 0;          // ------> 2.2.2 fu指向 首(A)态
                         } else {
-                            R[fu] = i;
+                            R[u] = i;
                         }
                         C[fu]++;                    // ------> 2.2.3 C: 
                         B[i] = fu;                  // ------> 2.2.4 B: 各态均指向首个 mark的态
@@ -341,7 +343,7 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
                         if (v < 0) {
                             C[fv = i] = 0;
                         } else {
-                            R[fv] = i;
+                            R[v] = i;
                         }
                         C[fv]++;
                         B[i] = fv;
@@ -356,14 +358,22 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
                 R[u] = fu;
                 L[fv] = v;
                 R[v] = fv;
-                REP (a, 256) {
-                    if (refines.count({a, fy})) {   // ------> 4 分区: 当你分裂一个分区后，这个变化会影响其他字符的判断 所以每个字符都要重新分配分区
+                REP (a, 256) {                      // ------> 4 分区: 当你分裂一个分区后，这个变化会影响其他字符的判断 所以每个字符都要重新分配分区
+                    if (refines.count({a, fy})) {
                         refines.emplace(a, fu != fy ? fu : fv);
                     } else {
                         refines.emplace(a, C[fu] < C[fv] ? fu : fv);
                     }
                 }
+            } else {
+                for (long i = fy;;) {
+                    mark[i] = false;
+                    if ((i = R[i]) == fy) {
+                        break;
+                    }
+                }
             }
+            CC[fy] = 0;
         }
 
         for (x = fx;;) {
