@@ -162,19 +162,19 @@ stmt:                                               // 支持两种语句: 普�
 
 union_expr:                                         // 并集  ab即a后边跟着b即ab就是并集
     intersect_expr { $$ = $1; }
-    | union_expr '|' difference_expr { $$ = new UnionExpr($1, $3); }
+    | union_expr '|' intersect_expr { $$ = new UnionExpr($1, $3); $$->loc = yyloc; }
 
 intersect_expr:
     difference_expr { $$ = $1; }
-    | intersect_expr '&' difference_expr { $$ = new IntersectExpr($1, $3); }
+    | intersect_expr '&' difference_expr { $$ = new IntersectExpr($1, $3); $$->loc = yyloc; }
 
 difference_expr:                                    // 差集
     concat_expr { $$ = $1; }
-    | difference_expr '-' concat_expr { $$ = new DifferenceExpr($1, $3); }
+    | difference_expr '-' concat_expr { $$ = new DifferenceExpr($1, $3); $$->loc = yyloc; }
 
 concat_expr:                                        // 链接
     factor { $$ = $1; }
-    | concat_expr factor { $$ = new ConcatExpr($1, $2); }
+    | concat_expr factor { $$ = new ConcatExpr($1, $2); $$->loc = yyloc; }
 
 factor:                                             // 基础因子
     IDENT { std::string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }         // IDENT类型 创建的AST实例类型是EmbedExpr       eg: abc
@@ -183,18 +183,19 @@ factor:                                             // 基础因子
     | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }   // ?
     | STRING_LITERAL { $$ = new LiteralExpr(*$1); delete $1; $$->loc = yyloc; }
     | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
-    | bracket { $$ = new BracketExpr($1); }         // bracket类型 创建的AST实例类型是BracketExpr   eg: [a-z]
+    | bracket { $$ = new BracketExpr($1); $$->loc = yyloc; }         // bracket类型 创建的AST实例类型是BracketExpr   eg: [a-z]
     | '(' union_expr ')' { $$ = $2; }
     | factor '>' action { $$ = $1; $$->entering.push_back($3); }
     | factor '@' action { $$ = $1; $$->finishing.push_back($3); }
     | factor '%' action { $$ = $1; $$->leaving.push_back($3); }
     | factor '$' action { $$ = $1; $$->transiting.push_back($3); }
-    | factor '?' { $$ = new MaybeExpr($1); }
-    | factor '*' { $$ = new ClosureExpr($1); }
-    | factor '+' { $$ = new PlusExpr($1); }         // 
+    | factor '?' { $$ = new MaybeExpr($1); $$->loc = yyloc; }
+    | factor '*' { $$ = new ClosureExpr($1); $$->loc = yyloc; }
+    | factor '+' { $$ = new PlusExpr($1); $$->loc = yyloc; }
 
 action:
-    IDENT { $$ = new RefAction(*$1); delete $1; $$->loc = yyloc; }
+    IDENT { std::string t; $$ = new RefAction(t, *$1); delete $1; $$->loc = yyloc; }
+    | IDENT SEMISEMI IDENT { $$ = new RefAction(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
     | BRACED_CODE { $$ = new InlineAction(*$1); delete $1; $$->loc = yyloc; }
 
 bracket:                                            // 字符集

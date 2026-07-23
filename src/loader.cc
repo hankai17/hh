@@ -40,6 +40,11 @@ void print_module_info(Module &mod) {
         printf("    %s\n", x->filename.c_str());
     }
 
+    puts("defined action:");
+    for (auto &x : mod.defined_action) {
+        printf("    %s\n", x.first.c_str());
+    }
+
     puts("defined:");
     for (auto &x : mod.defined) {
         printf("    %s\n", x.first.c_str());
@@ -59,11 +64,11 @@ struct ModuleImportDef : PreorderStmtVisitor {
 #ifdef DEBUG_ON
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor ActionStmt\n" << std::endl;
 #endif
-        if (mod.named_action.count(stmt.ident)) {
+        if (mod.defined_action.count(stmt.ident)) {
             n_errors++;
             mod.locfile.locate(stmt.loc, "Redefined '%s'\n", stmt.ident.c_str());
         }
-        mod.named_action[stmt.ident] = stmt.code;
+        mod.defined_action[stmt.ident] = stmt.code;
     }
 
     void visit(DefineStmt &stmt) override {                             // 2.1 接普通语句
@@ -98,7 +103,7 @@ struct ModuleImportDef : PreorderStmtVisitor {
     }
 };
 
-struct ModuleUse : PreorderActionExprStmtVisitor {
+struct ModuleUse : PrePostActionExprStmtVisitor {
     Module &mod;
     long &n_errors;
     DefineStmt *define_stmt = NULL;
@@ -108,12 +113,58 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
         n_errors(n_errors) {
     }
 
+    void post_expr(Expr &expr) override {
+        for (Action *a : expr.finishing) {
+            PrePostActionExprStmtVisitor::visit(*a);
+        }
+    }
+
+    void visit(RefAction &action) override {
+        if (action.qualified.size()) {
+            if (!mod.qualified_import.count(action.qualified)) {
+                n_errors++;
+                mod.locfile.locate(action.loc, "Unknown module '%s'\n", action.qualified.c_str());
+            } else {
+                auto it = mod.qualified_import[action.qualified]->defined.find(action.ident);
+                if (it == mod.qualified_import[action.qualified]->defined.end()) {
+                    n_errors++;
+                    mod.locfile.locate(action.loc, "'%s::%s': Undefined \n", action.qualified.c_str(), action.ident.c_str());
+                } else {
+                    action.define_module = mod.qualified_import[action.qualified];
+                }
+            }
+        } else {
+            auto it = mod.defined.find(action.ident);
+            auto module = it != mod.defined.end() ? &mod : NULL;
+            for (auto &import : mod.unqualified_import) {
+                auto it2 = import->defined.find(action.ident);
+                if (it2 != import->defined.end()) {
+                    if (module) {
+                        n_errors++;
+                        mod.locfile.locate(action.loc, "'%s' redefined in unqualified import %s\n",
+                                action.ident.c_str(),
+                                import->filename.c_str());
+                    } else {
+                        it = it2;
+                        module = import;
+                    }
+                }
+            }
+            if (!module) {
+                n_errors++;
+                mod.locfile.locate(action.loc, "'%s' Undefined\n", action.ident.c_str());
+            } else {
+                action.define_module = module;
+            }
+        }
+    }
+
     void visit(DefineStmt &stmt) override {
 #ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor DefineStmt\n" << std::endl;
 #endif
         define_stmt = &stmt;
-        stmt.rhs->accept(*this);
+        PrePostActionExprStmtVisitor::visit(*stmt.rhs);
         define_stmt = NULL;
     }
     

@@ -1,17 +1,37 @@
 #include "compiler.hh"
 #include "common.hh"
+#include "loader.hh"
+
 #include <map>
 #include <stack>
 #include <iostream>
 #include <functional>
 #include <unordered_map>
+#include <algorithm>
 
 //#define DEBUG_COMP 1
 
 static std::map<DefineStmt *, FsaAnno> compiled;
 
+static void print_assoc(const FsaAnno &anno) {
+    REP (i, anno.fsa.n()) {
+        printf("%ld: ", i);
+        for (auto a : anno.assoc[i]) {
+            const char *name = typeid(*a).name();
+            while (name && isdigit(name[0])) {
+                name++;
+            }
+            std::string t = name;
+            t = t.substr(t.size() - 4);
+            printf(" %s(%ld-%ld)", t.c_str(),
+                    a->loc.start, a->loc.end);
+        }
+    }
+    puts("");
+}
+
 static void print_fsa(const Fsa &fsa) {
-    printf("start: %ld\n", fsa.start);
+    printf("\nstart: %ld\n", fsa.start);
     printf("finals:");
     for (long i : fsa.finals) {
         printf(" %ld", i);
@@ -27,26 +47,63 @@ static void print_fsa(const Fsa &fsa) {
     }
 }
 
+Expr *find_lca(Expr *u, Expr *v) {
+    if (u->depth > v->depth) {
+        std::swap(u, v);
+    }
+    if (u->depth < v->depth) {
+        for (long k = 63 - __builtin_clzl(v->depth - u->depth); k >= 0; k--) {
+            if (u->depth <= v->depth - (1L << k)) {
+                v = v->anc[k];
+            }
+        }
+    }
+    if (u == v) {
+        return u;
+    }
+    for (long k = 63 - __builtin_clzl(v->depth); k >= 0; k--) {
+        if (u->anc[k] != v->anc[k]) {
+            u = u->anc[k];
+            v = v->anc[k];
+        }
+    }
+    return u->anc[0];
+}
+
 struct Compiler : Visitor<Expr> {
     std::stack<FsaAnno> st;
     std::stack<Expr*> path;
+    long tick = 0;
 
-    void pre(Expr &expr) {
+    void pre_expr(Expr &expr) {
+        expr.pre = tick++;
         expr.depth = path.size();
         if (path.size()) {
-            expr.anc.assign(1, &expr);
+            expr.anc.assign(1, path.top());
+            for (long k = 1; 1L << k <= expr.depth; k++) {
+                expr.anc.push_back(expr.anc[k - 1]->anc[k - 1]);
+            }
+        } else {
+            expr.anc.assign(1, nullptr);
         }
+        path.push(&expr);
+    }
+
+    void post_expr(Expr &expr) {
+        path.pop();
+        expr.post = tick;
     }
 
     void visit(Expr &expr) override {
+        pre_expr(expr);
         expr.accept(*this);
+        post_expr(expr);
     }
 
     void visit(BracketExpr &expr) override {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit BracketExpr" << std::endl;
 #endif
-        pre(expr);
         st.push(FsaAnno::bracket(expr));
     }
 
@@ -54,8 +111,7 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit ClosureExpr" << std::endl;
 #endif
-        pre(expr);
-        expr.inner->accept(*this);
+        visit(*expr.inner);
         st.top().star(expr);
     }
 
@@ -63,7 +119,6 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit CollapseExpr" << std::endl;
 #endif
-        pre(expr);
         st.push(FsaAnno::collapse(expr));
     }
 
@@ -71,11 +126,9 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit ConcatExpr" << std::endl;
 #endif
-        pre(expr);
-        path.push(&expr);
-        expr.rhs->accept(*this);
+        visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
-        expr.lhs->accept(*this);
+        visit(*expr.lhs);
         path.pop();
         st.top().concat(rhs);
     }
@@ -84,12 +137,9 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit DifferenceExpr" << std::endl;
 #endif
-        pre(expr);
-        path.push(&expr);
-        expr.rhs->accept(*this);
+        visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
-        expr.lhs->accept(*this);
-        path.pop();
+        visit(*expr.lhs);
         st.top().difference(rhs);
     }
 
@@ -97,7 +147,6 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit DotExpr" << std::endl;
 #endif
-        pre(expr);
         st.push(FsaAnno::dot(expr));
     }
 
@@ -105,7 +154,6 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit EmbedExpr" << std::endl;
 #endif
-        pre(expr);
         st.push(compiled[expr.define_stmt]);
     }
 
@@ -113,12 +161,9 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit IntersectExpr" << std::endl;
 #endif
-        pre(expr);
-        path.push(&expr);
-        expr.rhs->accept(*this);
+        visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
-        expr.lhs->accept(*this);
-        path.pop();
+        visit(*expr.lhs);
         st.top().intersect(rhs);
     }
 
@@ -126,7 +171,6 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit LiteralExpr" << std::endl;
 #endif
-        pre(expr);
         st.push(FsaAnno::literal(expr));
     }
 
@@ -134,10 +178,7 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit MaybeExpr" << std::endl;
 #endif
-        pre(expr);
-        path.push(&expr);
-        expr.inner->accept(*this);
-        path.pop();
+        visit(*expr.inner);
         st.top().question(expr);
     }
 
@@ -145,10 +186,7 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit PlusExpr" << std::endl;
 #endif
-        pre(expr);
-        path.push(&expr);
-        expr.inner->accept(*this);
-        path.pop();
+        visit(*expr.inner);
         st.top().plus();
     }
 
@@ -156,12 +194,9 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit UnionExpr" << std::endl;
 #endif
-        pre(expr);
-        path.push(&expr);
-        expr.rhs->accept(*this);
+        visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
-        expr.lhs->accept(*this);
-        path.pop();
+        visit(*expr.lhs);
         st.top().union_(rhs, expr);
     }
 };
@@ -172,8 +207,41 @@ void compile(DefineStmt *stmt) {
     }
     FsaAnno &anno = compiled[stmt];
     Compiler comp;
-    stmt->rhs->accept(comp);
+    comp.visit(*stmt->rhs);
     anno = std::move(comp.st.top());
+}
+
+void compile_actions(FsaAnno &anno) {
+    REP (i, anno.fsa.n()) {
+        std::sort(ALL(anno.assoc[i]), [] (const Expr *x, const Expr *y) {
+            return x->pre < y->pre;
+        });
+    }
+    REP (u, anno.fsa.n()) {
+        for (auto &e : anno.fsa.adj[u]) {
+            long v = e.second;
+            if (anno.fsa.is_final(v)) {
+                Expr *last = NULL;
+                for (auto a : anno.assoc[v]) {
+                    Expr *stop = last ? find_lca(last, a) : NULL;
+                    last = a;
+                    for (Expr *x = a; a != stop; a = a->anc[0]) {
+                        for (auto action : x->finishing) {
+                            if (auto t = dynamic_cast<InlineAction*>(action)) {
+                                printf("%ld %ld %ld %s\n",
+                                        u, e.first, v,
+                                        t->code.c_str());
+                            } else if (auto t = dynamic_cast<RefAction*>(action)) {
+                                printf("%ld %ld %ld %s\n",
+                                        u, e.first, v,
+                                        t->define_module->defined_action[t->ident].c_str());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 void export_statement(DefineStmt *stmt) {
@@ -243,13 +311,21 @@ void export_statement(DefineStmt *stmt) {
     allo = 0;
     auto relate = [&] (long x) {
         if (allo != x) {
-            anno.fsa.adj[allo] = std::move(anno.fsa.adj[x]);
             anno.assoc[allo] = std::move(anno.assoc[x]);
         }
         allo++;
     };
     anno.fsa.remove_dead(relate);
+    if (anno.fsa.finals.empty()) {
+        anno.assoc.assign(1, {});
+    } else {
+        anno.assoc.resize(allo);
+    }
+
     print_fsa(anno.fsa);
+    print_assoc(anno);
+
+    compile_actions(anno);
 }
 
 

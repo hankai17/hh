@@ -11,7 +11,7 @@ struct Module {
     std::map<std::string, DefineStmt*> defined;
     std::vector<Module*> unqualified_import;
     std::map<std::string, Module*> qualified_import;
-    std::map<std::string, std::string> named_action;
+    std::map<std::string, std::string> defined_action;
 };
 
 long load(const std::string &filename);
