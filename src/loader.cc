@@ -16,10 +16,11 @@
 #include <unordered_map>
 #include <functional>
 
-//#define DEBUG_ON 0
+#define DEBUG_ON 0
 
 static std::map<std::pair<dev_t, ino_t>, Module> inode2module;
 static std::unordered_map<DefineStmt*, std::vector<DefineStmt*>> depended_by;
+FILE *output;
 
 long load(const char *filename);
 Module *load_module(const char *filename);
@@ -106,15 +107,28 @@ struct ModuleImportDef : PreorderStmtVisitor {
 struct ModuleUse : PrePostActionExprStmtVisitor {
     Module &mod;
     long &n_errors;
-    DefineStmt *define_stmt = NULL;
+    DefineStmt *stmt = NULL;
 
     ModuleUse(Module &mod, long &n_errors) :
         mod(mod),
         n_errors(n_errors) {
     }
 
+    void pre_expr(Expr &expr) override {
+        expr.stmt = stmt;
+    }
+
     void post_expr(Expr &expr) override {
+        for (Action *a : expr.entering) {
+            PrePostActionExprStmtVisitor::visit(*a);
+        }
         for (Action *a : expr.finishing) {
+            PrePostActionExprStmtVisitor::visit(*a);
+        }
+        for (Action *a : expr.leaving) {
+            PrePostActionExprStmtVisitor::visit(*a);
+        }
+        for (Action *a : expr.transiting) {
             PrePostActionExprStmtVisitor::visit(*a);
         }
     }
@@ -157,28 +171,6 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
                 action.define_module = module;
             }
         }
-    }
-
-    void visit(DefineStmt &stmt) override {
-#ifdef DEBUG_ON
-        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor DefineStmt\n" << std::endl;
-#endif
-        define_stmt = &stmt;
-        PrePostActionExprStmtVisitor::visit(*stmt.rhs);
-        define_stmt = NULL;
-    }
-    
-    void visit(BracketExpr &expr) override {
-#ifdef DEBUG_ON
-        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor BracketExpr\n" << std::endl;
-#endif
-    }
-
-    void visit(ClosureExpr &expr) override {
-#ifdef DEBUG_ON
-        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor ClosureExpr\n" << std::endl;
-#endif
-        expr.inner->accept(*this);
     }
 
     void visit(CollapseExpr &expr) override {
@@ -238,7 +230,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
                     n_errors++;
                     mod.locfile.locate(expr.loc, "'%s::%s': Undefined \n", expr.qualified.c_str(), expr.ident.c_str());
                 } else {
-                    depended_by[it->second].push_back(define_stmt);
+                    depended_by[it->second].push_back(stmt);
                     expr.define_stmt = it->second;
                 }
             }
@@ -262,32 +254,19 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
                 n_errors++;
                 mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident.c_str());
             } else {
-                depended_by[it->second].push_back(define_stmt); // 被依赖
+                depended_by[it->second].push_back(stmt); // 被依赖
                 expr.define_stmt = it->second;
             }
         }
     }
 
-    void visit(MaybeExpr &expr) override {
+    void visit(DefineStmt &stmt) override {
 #ifdef DEBUG_ON
-        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor MaybeExpr\n" << std::endl;
+        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor DefineStmt\n" << std::endl;
 #endif
-        expr.inner->accept(*this);
-    }
-
-    void visit(PlusExpr &expr) override {
-#ifdef DEBUG_ON
-        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor PlusExpr\n" << std::endl;
-#endif
-        expr.inner->accept(*this);
-    }
-
-    void visit(UnionExpr &expr) override {
-#ifdef DEBUG_ON
-        std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor UnionExpr\n" << std::endl;
-#endif
-        expr.lhs->accept(*this);
-        expr.rhs->accept(*this);
+        this->stmt = &stmt;
+        PrePostActionExprStmtVisitor::visit(*stmt.rhs);
+        this->stmt = NULL;
     }
 };
 
@@ -308,6 +287,7 @@ Module *load_module(long &n_errors, const std::string &filename) {
     }
 
     if (inode2module.count(inode)) {
+        fclose(file);
         return &inode2module[inode];
     }
 
@@ -327,6 +307,7 @@ Module *load_module(long &n_errors, const std::string &filename) {
         data += std::string(buf, buf + r);
         if (r < sizeof(buf)) break;
     }
+    fclose(file);
 
     if (data.empty() || data.back() != '\n') {
         data.push_back('\n');
@@ -395,7 +376,7 @@ long load(const std::string &filename) {
 
     Module *mod = load_module(n_errors, filename);
     if (!mod) {                 // 1 加载首文件 构建基本的(第一个)AST
-        err_exit(EX_OSFILE, "open", filename.c_str());
+        err_exit(EX_OSFILE, "fopen", filename.c_str());
         return n_errors;
     }
 
@@ -433,18 +414,20 @@ long load(const std::string &filename) {
         return n_errors; 
     }
 
-    if (opt_module_info) {
+    if (1) {
+        printf("\n====== Module\n");
         for (auto &it : inode2module) {
             Module &mod = it.second;
             print_module_info(mod);
         }
     }
 
-    if (opt_dump_tree) {
+    if (1) {
+        printf("\n====== Tree\n");
         StmtPrinter p;
         for (auto &it : inode2module) {
             Module &mod = it.second;
-            printf("=== %s\n", mod.filename.c_str());
+            printf("filename: %s\n", mod.filename.c_str());
             for (Stmt *s = mod.toplevel; s; s= s->next) {
                 s->accept(p);
             }
@@ -463,14 +446,15 @@ long load(const std::string &filename) {
         compile(stmt);
     }
 
-    printf("\nOutput\n");
-    for (Stmt *x = mod->toplevel; x; x = x->next) {
-        if (auto xx = dynamic_cast<DefineStmt*>(x)) {
-            if (xx->export_) {
-                export_statement(xx);
-            }
-        }
-    }
+    output = stdout;
+
+    printf("\nGenerating header\n");
+    generate_header(mod);
+
+    printf("\nGenerating body\n");
+    generate_body(mod);
+
+    fclose(output);
     return n_errors;
 }
 

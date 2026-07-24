@@ -86,8 +86,10 @@ IS  (u|U|l|L)*
 
 "action" return ACTION;
 "as" return AS;
+"c++" return CPP;
 "export" return EXPORT;
 "import" return IMPORT;
+"intact" return INTACT;
 
 {L}({L}|{D})* {                                     // 匹配abc123 存到string里并返回IDENT
     //printf("DEBUG: IDENT recognized: '%s'\n", yytext);
@@ -143,13 +145,14 @@ IS  (u|U|l|L)*
 <IN_BRACE>{
     "'" { tmp_bracket += '\''; yy_push_state(IN_Q_STRING, yyscanner); }
     "\"" { tmp_bracket += '"'; yy_push_state(IN_QQ_STRING, yyscanner); }
-    "[" { tmp_bracket += '['; yy_push_state(IN_BRACKET, yyscanner); }
     "{" { tmp_bracket += '{'; yy_push_state(IN_BRACE, yyscanner); }
     "}" {
         yy_pop_state(yyscanner);
         if (YY_START == INITIAL) {
             yylval->str = new std::string(tmp_bracket);
             return BRACED_CODE;
+        } else {
+            tmp_bracket += '}';
         }
     }
     .|"\n" tmp_bracket += yytext[0];
@@ -168,7 +171,7 @@ IS  (u|U|l|L)*
     }
     \\' tmp_str += '\''; tmp_bracket += yytext;
     \\n unexpected_newline(yylval, "'");
-    . tmp_str += yytext[0]; tmp_bracket += yytext;
+    .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
     <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "'");
 }
 
@@ -213,12 +216,12 @@ IS  (u|U|l|L)*
     \\r tmp_str += '\r'; tmp_bracket += yytext;
     \\t tmp_str += '\t'; tmp_bracket += yytext;
     \\v tmp_str += '\v'; tmp_bracket += yytext;
-    \\[\"\'?\\] tmp_str += yytext[1]; tmp_bracket += yytext;
+    \\[\n\"\'?\\] tmp_str += yytext[1]; tmp_bracket += yytext;
     \\. {
         yylval->errmsg = aprintf("Invalied \\-escape: %s", yytext);
         return INVALID_CHARACTER;
     }
-    . tmp_str += yytext[0]; tmp_bracket += yytext;
+    .|\n tmp_str += yytext[0]; tmp_bracket += yytext;
     <<EOF>> unexpected_eof(yylval, "\""); BEGIN INITIAL;
     "\n" unexpected_newline(yylval, "\""); return INVALID_CHARACTER;
 }

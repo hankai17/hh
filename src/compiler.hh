@@ -4,3 +4,5 @@
 
 void compile(DefineStmt *);
 void export_statement(DefineStmt *);
+void generate_header(Module *mod);
+void generate_body(Module *mod);

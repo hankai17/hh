@@ -47,3 +47,5 @@ void sorted_insert(std::vector<T>& a, const T& x)
     *it = x;
 }
 
+void ident(FILE *f, int d);
+

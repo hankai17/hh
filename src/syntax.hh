@@ -4,6 +4,7 @@
 #include <bitset>
 #include <vector>
 #include <string>
+#include <sstream>
 
 //#define DEBUG_CLS 0
 
@@ -69,6 +70,7 @@ struct Visitor<Expr> {                              // 1 visitor虚基类定义e
 // Stmt
 struct Stmt;
 struct ActionStmt;
+struct CppStmt;
 struct DefineStmt;          // 赋值语句
 struct EmptyStmt;           // 空语句
 struct ImportStmt;
@@ -77,6 +79,7 @@ template <>
 struct Visitor<Stmt> {                              // 同上 visitor虚基类定义stmt各接口
     virtual void visit(Stmt &) = 0;
     virtual void visit(ActionStmt &) = 0;
+    virtual void visit(CppStmt &) = 0;
     virtual void visit(DefineStmt &) = 0;
     virtual void visit(EmptyStmt &) = 0;
     virtual void visit(ImportStmt &) = 0;
@@ -127,7 +130,35 @@ struct Expr : VisitableBase<Expr> {                 // 2 Expr 白嫖accept接口
     std::vector<Action *> finishing;
     std::vector<Action *> leaving;
     std::vector<Action *> transiting;
-    virtual ~Expr() = default;
+    DefineStmt *stmt = NULL;
+    virtual ~Expr() {
+        for (auto a : entering) {
+            delete a;
+        }
+        for (auto a : finishing) {
+            delete a;
+        }
+        for (auto a : leaving) {
+            delete a;
+        }
+        for (auto a : transiting) {
+            delete a;
+        }
+    }
+    bool no_action() const {
+        return entering.empty() &&
+                finishing.empty() &&
+                leaving.empty() &&
+                transiting.empty();
+    }
+    std::string dump_info() {
+        std::ostringstream oss;
+        oss << "depth: " << depth
+            << ", pre: " << pre
+            << ", post: " << post
+            << ", stmt_ptr:" << (void*)stmt;
+        return oss.str();
+    }
 };
 
 struct BracketExpr : Visitable<Expr, BracketExpr> { // 2.1 CRTP 但还没有实现expr中 该类的visit接口
@@ -319,14 +350,24 @@ struct ActionStmt : Visitable<Stmt, ActionStmt> {
     }
 };
 
+struct CppStmt : Visitable<Stmt, CppStmt> {
+    std::string code;
+    CppStmt(std::string &code) :
+        code(std::move(code)) {
+#ifdef DEBUG_CLS 
+        printf("new CppStmt\n");
+#endif
+    }
+};
+
 struct DefineStmt : Visitable<Stmt, DefineStmt> {
-    bool export_;
+    bool export_ = false;
+    bool intact = false;
     std::string lhs;
     Expr *rhs;
     Module *module;
 
-    DefineStmt(bool export_, std::string &lhs, Expr *rhs) :
-        export_(export_),
+    DefineStmt(std::string &lhs, Expr *rhs) :
         lhs(std::move(lhs)),
         rhs(rhs) {
 #ifdef DEBUG_CLS 
@@ -397,6 +438,11 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         printf("%*s%s\n", 2 * (depth + 1), "", stmt.code.c_str());
     }
 
+    void visit(CppStmt &stmt) override {
+        printf("%*s%s\n", 2 * depth, "", "CppStmt");
+        printf("%*s%s\n", 2 * (depth + 1), "", stmt.code.c_str());
+    }
+
     void visit(EmptyStmt &stmt) override {
         printf("%*s%s\n", 2 * depth, "", "EmptyStmt");
     }
@@ -447,7 +493,8 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     }
 
     void visit(BracketExpr &expr) override {
-        printf("%*s%s\n", 2 * depth, "", "BracketExpr");
+        std::string info = expr.dump_info();
+        printf("%*s%s%s\n", 2 * depth, "", "BracketExpr: ", info.c_str());
         printf("%*s", 2 * (depth + 1), "");
         for (long i = 0, j; i < expr.charset.size(); ) {
             if (!expr.charset[i]) {
@@ -558,6 +605,12 @@ struct PreorderStmtVisitor : Visitor<Stmt> {
     void visit(DefineStmt &stmt) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor DefineStmt\n");
+#endif
+    }
+
+    void visit(CppStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderStmtVisitor CppStmt\n");
 #endif
     }
 
@@ -741,6 +794,12 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
     void visit(ActionStmt &stmt) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor ActionStmt\n");
+#endif
+    }
+
+    void visit(CppStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor CppStmt\n");
 #endif
     }
 

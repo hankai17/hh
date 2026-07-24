@@ -15,9 +15,9 @@ struct Fsa {
     void epsilon_closure(std::vector<long> &src) const;
 
     Fsa operator~() const;
-    Fsa difference(const Fsa &rhs, std::function<void (long, long)> relate) const;
+    Fsa difference(const Fsa &rhs, std::function<void (long)> relate) const;
     Fsa intersect(const Fsa &rhs, std::function<void (long, long)> relate) const;
-    Fsa determinize(std::function<void (std::vector<long>&)> relate) const;
+    Fsa determinize(std::function<void (const std::vector<long>&)> relate) const;
     Fsa hopcroft_minimize(std::function<void (std::vector<long>&)> relate);
     void remove_dead(std::function<void(long)> relate);
 };

@@ -17,4 +17,5 @@ struct Module {
 long load(const std::string &filename);
 Module *load_module(long &n_errors, const std::string &filename);
 void unload_all();
+extern FILE *output;
 

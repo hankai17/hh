@@ -115,7 +115,7 @@ Fsa Fsa::intersect(const Fsa &rhs, std::function<void (long, long)> relate) cons
     return r;
 }
 
-Fsa Fsa::difference(const Fsa &rhs, std::function<void (long, long)> relate) const {
+Fsa Fsa::difference(const Fsa &rhs, std::function<void (long)> relate) const {
     Fsa r;
     std::vector<std::pair<long, long>> q;
     long u0;
@@ -130,7 +130,7 @@ Fsa Fsa::difference(const Fsa &rhs, std::function<void (long, long)> relate) con
             r.finals.push_back(i);
         }
         r.adj.emplace_back();
-        relate(u0, u1 == rhs.n() ? -1 : u1);
+        relate(u0);
         auto it0 = adj[u0].begin();
         auto it1 = rhs.adj[u1].begin();
         auto it1e = it1;
@@ -158,7 +158,7 @@ Fsa Fsa::difference(const Fsa &rhs, std::function<void (long, long)> relate) con
     return r;
 }
 
-Fsa Fsa::determinize(std::function<void (std::vector<long>&)> relate) const {
+Fsa Fsa::determinize(std::function<void (const std::vector<long>&)> relate) const {
     Fsa r;                                                          // 新DFA
     std::unordered_map<std::vector<long>, long> m;
     std::vector<std::vector<long>> q{{start}};
@@ -168,8 +168,7 @@ Fsa Fsa::determinize(std::function<void (std::vector<long>&)> relate) const {
     m[q[0]] = 0;                                                    // 设置状态为 0
     r.start = 0;
     REP (i, q.size()) {
-        std::vector<long> rel = q[i];
-        relate(rel);
+        relate(q[i]);
         bool final = false;
         for (long u : q[i]) {
             if (std::binary_search(ALL(finals), u)) {

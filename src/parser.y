@@ -55,7 +55,7 @@ int parse(const LocationFile &locfile, Stmt *&res);
 %destructor { delete $$; } <charset>
 
                                                     // Token(lexer解析而得) 声明 // 告诉 Bison 哪些 token(终结符) 有值，以及值的类型
-%token ACTION AS EXPORT IMPORT INVALID_CHARACTER SEMISEMI
+%token ACTION AS CPP EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
 %token <str> IDENT
 %token <str> STRING_LITERAL
@@ -66,7 +66,7 @@ int parse(const LocationFile &locfile, Stmt *&res);
 
                                                     // 非终结符类型 // 指定不同产生式返回值的类型
 %type <action> action
-%type <stmt> stmt stmt_list
+%type <stmt> define_stmt stmt stmt_list
 %type <expr> concat_expr difference_expr factor intersect_expr union_expr
 %type <charset> bracket bracket_items
                                                     // 用户代码段
@@ -152,13 +152,18 @@ stmt_list:                                          // 支持空列表 + 链表�
         $$ = $3;
     }
 
-stmt:                                               // 支持两种语句: 普通赋值：x = expr; 初始化赋值：x := expr;
-    IDENT '=' union_expr { $$ = new DefineStmt(false, *$1, $3); delete $1; $$->loc = yyloc; }
-    | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, *$2, $4); delete $2; $$->loc = yyloc; }
+stmt:
+    define_stmt { $$ = $1; }
     | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
     | IMPORT STRING_LITERAL { std::string t; $$ = new ImportStmt(*$2, t); delete $2; $$->loc = yyloc; }
     | ACTION IDENT BRACED_CODE { $$ = new ActionStmt(*$2, *$3); delete $2; delete $3; $$->loc = yyloc; }
+    | CPP BRACED_CODE { $$ = new CppStmt(*$2); delete $2; $$->loc = yyloc; }
     | error {}
+
+define_stmt:
+    IDENT '=' union_expr { $$ = new DefineStmt(*$1, $3); delete $1; $$->loc = yyloc; }
+    | EXPORT define_stmt { $$ = $2; ((DefineStmt*)$$)->export_ = true; $$->loc = yyloc; }
+    | INTACT define_stmt { $$ = $2; ((DefineStmt*)$$)->intact = true; $$->loc = yyloc; }
 
 union_expr:                                         // 并集  ab即a后边跟着b即ab就是并集
     intersect_expr { $$ = $1; }

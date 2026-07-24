@@ -117,3 +117,7 @@ long get_long(const char *arg) {
     return ret;
 }
 
+void ident(FILE *f, int d) {
+    fprintf(f, "%*s", 2 * d, "");
+}
+

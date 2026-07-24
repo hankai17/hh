@@ -14,24 +14,41 @@
 static std::map<DefineStmt *, FsaAnno> compiled;
 
 static void print_assoc(const FsaAnno &anno) {
+    printf("====== Associated Expr of each state\n");
     REP (i, anno.fsa.n()) {
         printf("%ld: ", i);
-        for (auto a : anno.assoc[i]) {
+        for (auto aa : anno.assoc[i]) {
+            auto a = aa.first;
             const char *name = typeid(*a).name();
             while (name && isdigit(name[0])) {
                 name++;
             }
             std::string t = name;
             t = t.substr(t.size() - 4);
-            printf(" %s(%ld-%ld)", t.c_str(),
+            printf(" %s(%ld-%ld", t.c_str(),
                     a->loc.start, a->loc.end);
+            if (a->entering.size()) {
+                printf(",>%zd", a->entering.size());
+            }
+            if (a->leaving.size()) {
+                printf(",%%%zd", a->leaving.size());
+            }
+            if (a->finishing.size()) {
+                printf(",@%zd", a->finishing.size());
+            }
+            if (a->transiting.size()) {
+                printf(",$%zd", a->transiting.size());
+            }
+            printf(")");
         }
+        puts("");
     }
     puts("");
 }
 
 static void print_fsa(const Fsa &fsa) {
-    printf("\nstart: %ld\n", fsa.start);
+    printf("====== Automato\n");
+    printf("start: %ld\n", fsa.start);
     printf("finals:");
     for (long i : fsa.finals) {
         printf(" %ld", i);
@@ -45,6 +62,7 @@ static void print_fsa(const Fsa &fsa) {
         }
         puts("");
     }
+    puts("");
 }
 
 Expr *find_lca(Expr *u, Expr *v) {
@@ -61,13 +79,15 @@ Expr *find_lca(Expr *u, Expr *v) {
     if (u == v) {
         return u;
     }
-    for (long k = 63 - __builtin_clzl(v->depth); k >= 0; k--) {
-        if (u->anc[k] != v->anc[k]) {
-            u = u->anc[k];
-            v = v->anc[k];
+    if (v->depth) {
+        for (long k = 63 - __builtin_clzl(v->depth); k >= 0; k--) {
+            if (u->anc[k] != v->anc[k]) {
+                u = u->anc[k];
+                v = v->anc[k];
+            }
         }
     }
-    return u->anc[0];
+    return u->anc[0] == v->anc[0] ? u->anc[0] : NULL;
 }
 
 struct Compiler : Visitor<Expr> {
@@ -130,7 +150,7 @@ struct Compiler : Visitor<Expr> {
         FsaAnno rhs = std::move(st.top());
         visit(*expr.lhs);
         path.pop();
-        st.top().concat(rhs);
+        st.top().concat(rhs, expr);
     }
 
     void visit(DifferenceExpr &expr) override {
@@ -140,7 +160,7 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
         visit(*expr.lhs);
-        st.top().difference(rhs);
+        st.top().difference(rhs, expr);
     }
 
     void visit(DotExpr &expr) override {
@@ -154,7 +174,9 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit EmbedExpr" << std::endl;
 #endif
-        st.push(compiled[expr.define_stmt]);
+        FsaAnno anno = compiled[expr.define_stmt];
+        anno.add_assoc(expr);
+        st.push(anno);
     }
 
     void visit(IntersectExpr &expr) override {
@@ -164,7 +186,7 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
         visit(*expr.lhs);
-        st.top().intersect(rhs);
+        st.top().intersect(rhs, expr);
     }
 
     void visit(LiteralExpr &expr) override {
@@ -187,7 +209,7 @@ struct Compiler : Visitor<Expr> {
         std::cout << "Compiler visit PlusExpr" << std::endl;
 #endif
         visit(*expr.inner);
-        st.top().plus();
+        st.top().plus(expr);
     }
 
     void visit(UnionExpr &expr) override {
@@ -211,46 +233,127 @@ void compile(DefineStmt *stmt) {
     anno = std::move(comp.st.top());
 }
 
-void compile_actions(FsaAnno &anno) {
-    REP (i, anno.fsa.n()) {
-        std::sort(ALL(anno.assoc[i]), [] (const Expr *x, const Expr *y) {
-            return x->pre < y->pre;
+void compile_actions(DefineStmt *stmt) {
+    FsaAnno &anno = compiled[stmt];
+    auto find_within = [&] (long u) {
+        std::vector<std::pair<Expr*, ExprTag>> within;
+        Expr *last = NULL;
+        std::sort(ALL(anno.assoc[u]), [](const std::pair<Expr*, ExprTag> &x,
+                const std::pair<Expr*, ExprTag> &y) {
+            if (x.first->pre != y.first->pre) {
+                return x.first->pre < y.first->pre;
+            }
+            return x.second < y.second;
         });
+        for (auto aa : anno.assoc[u]) {
+            Expr *stop = last ? find_lca(last, aa.first) : NULL;
+            last = aa.first;
+            for (Expr *x = aa.first; x != stop; x = x->anc[0]) {
+                within.emplace_back(x, aa.second);
+            }
+        }
+        std::sort(ALL(within));
+        return within;
+    };
+    decltype(anno.assoc) withins(anno.fsa.n());
+    REP (i, anno.fsa.n()) {
+        withins[i] = std::move(find_within(i));
     }
+    auto get_code = [] (Action *action) {
+        if (auto t = dynamic_cast<InlineAction*>(action)) {
+            return t->code;
+        } else if (auto t = dynamic_cast<RefAction*>(action)) {
+            return t->define_module->defined_action[t->ident];
+        }
+        return std::string();
+    };
+#define D(S)                                                            \
+    if (auto t = dynamic_cast<InlineAction*>(action)) {                 \
+        printf(" %ld, %ld, %ld, %s\n", u, e.first, v, t->code.c_str()); \
+    } else if (auto t = dynamic_cast<RefAction*>(action)) {             \
+        printf(" %ld, %ld, %ld, %s\n", u, e.first, v,                   \
+            t->define_module->defined_action[t->ident].c_str());        \
+    }
+    fprintf(output, "long hh_%s_transit(long u, long c)\n", stmt->lhs.c_str());
+    fprintf(output, "{\n");
+    ident(output, 1);
+    fprintf(output, "long v = -1;\n");
+    ident(output, 1);
+    fprintf(output, "switch (u) {\n");
     REP (u, anno.fsa.n()) {
+        if (anno.fsa.adj[u].empty()) {
+            continue;
+        }
+        ident(output, 1);
+        fprintf(output, "case %ld:\n", u);
+        ident(output, 2);
+        fprintf(output, "switch (c) {\n");
         for (auto &e : anno.fsa.adj[u]) {
             long v = e.second;
-            if (anno.fsa.is_final(v)) {
-                Expr *last = NULL;
-                for (auto a : anno.assoc[v]) {
-                    Expr *stop = last ? find_lca(last, a) : NULL;
-                    last = a;
-                    for (Expr *x = a; a != stop; a = a->anc[0]) {
-                        for (auto action : x->finishing) {
-                            if (auto t = dynamic_cast<InlineAction*>(action)) {
-                                printf("%ld %ld %ld %s\n",
-                                        u, e.first, v,
-                                        t->code.c_str());
-                            } else if (auto t = dynamic_cast<RefAction*>(action)) {
-                                printf("%ld %ld %ld %s\n",
-                                        u, e.first, v,
-                                        t->define_module->defined_action[t->ident].c_str());
-                            }
-                        }
+            ident(output, 2);
+            fprintf(output, "case %ld:\n", e.first);
+            ident(output, 3);
+            fprintf(output, "v = %ld;\n", v);
+            auto ie = withins[u].end();
+            auto je = withins[v].end();
+            for (auto i = withins[u].begin(), j = withins[v].begin(); i != ie; ++i) {
+                while (j != je && i->first > j->first) {
+                    ++j;
+                }
+                if (j == je || i->first != j->first) {
+                    for (auto action : i->first->leaving) {
+                        ident(output, 3);
+                        fprintf(output, "{%s}\n", get_code(action).c_str());
                     }
                 }
             }
+            for (auto i = withins[u].begin(), j = withins[v].begin(); j != je; ++j) {
+                while (i != ie && i->first < j->first) {
+                    ++i;
+                }
+                if (i == ie || i->first != j->first) {
+                    for (auto action : i->first->entering) {
+                        ident(output, 3);
+                        fprintf(output, "{%s}\n", get_code(action).c_str());
+                    }
+                }
+            }
+            for (auto j = withins[v].begin(); j != je; ++j) {
+                for (auto action : j->first->transiting) {
+                    ident(output, 3);
+                    fprintf(output, "{%s}\n", get_code(action).c_str());
+                }
+            }
+            for (auto j = withins[v].begin(); j != je; ++j) {
+                if (long(j->second) & long(ExprTag::final)) {
+                    for (auto action : j->first->finishing) {
+                        ident(output, 3);
+                        fprintf(output, "{%s}\n", get_code(action).c_str());
+                    }
+                }
+            }
+            ident(output, 3);
+            fprintf(output, "break;\n");
         }
+        ident(output, 2);
+        fprintf(output, "}\n");
+        ident(output, 2);
+        fprintf(output, "break;\n");
     }
+    ident(output, 1);
+    fprintf(output, "}\n");
+    ident(output, 1);
+    fprintf(output, "return v;\n");
+    fprintf(output, "}\n");
 }
 
-void export_statement(DefineStmt *stmt) {
+void generate_export(DefineStmt *stmt) {
     printf("Exporting %s\n", stmt->lhs.c_str());
     FsaAnno &anno = compiled[stmt];
 
     printf("Construct automato with all referenced CollapseExpr's DefineStmt\n");
     std::vector<std::vector<std::pair<long, long>>> adj;
-    std::vector<std::vector<Expr*>> assoc;
+    decltype(anno.assoc) assoc;
     std::vector<std::vector<DefineStmt*>> cllps;
     long allo = 0;
     std::unordered_map<DefineStmt*, long> stmt2offset;
@@ -273,8 +376,8 @@ void export_statement(DefineStmt *stmt) {
         assoc.emplace_back();
         FOR (i, old, old + anno.fsa.n()) {
             if (anno.fsa.has(i - old, 256)) {
-                for (auto a : assoc[i]) {
-                    if (auto e = dynamic_cast<CollapseExpr *>(a)) {
+                for (auto aa : assoc[i]) {
+                    if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {
                         DefineStmt *v = e->define_stmt;
                         allocate_collapse(v);
                         sorted_insert(adj[i],
@@ -284,8 +387,8 @@ void export_statement(DefineStmt *stmt) {
                 long j = adj[i].size();
                 while (j && adj[i][j - 1].first == 256) {
                     long v = adj[i][--j].second;
-                    for (auto a : assoc[v]) {
-                        if (auto e = dynamic_cast<CollapseExpr*>(a)) {
+                    for (auto aa : assoc[v]) {
+                        if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
                             DefineStmt *w = e->define_stmt;
                             allocate_collapse(w);
                             for (long f : compiled[w].fsa.finals) {
@@ -305,9 +408,18 @@ void export_statement(DefineStmt *stmt) {
     allocate_collapse(stmt);
     anno.fsa.adj = std::move(adj);
     anno.assoc = std::move(assoc);
+    anno.deterministic = false;
+
+    if (1 && !stmt->intact) {
+        printf("Constructing substring grammar\n");
+        anno.determinize();
+        anno.minimize();
+        anno.substring_grammar();
+    }
+
+    printf("Determinize minimize, remove dead states\n");
     anno.determinize();
     anno.minimize();
-
     allo = 0;
     auto relate = [&] (long x) {
         if (allo != x) {
@@ -322,10 +434,48 @@ void export_statement(DefineStmt *stmt) {
         anno.assoc.resize(allo);
     }
 
-    print_fsa(anno.fsa);
-    print_assoc(anno);
+    if (1) {
+        print_fsa(anno.fsa);
+        print_assoc(anno);
+    }
 
-    compile_actions(anno);
+    fprintf(output, "void hh_%s_init(long &start, std::vector<long> &finals)\n", stmt->lhs.c_str());
+    fprintf(output, "{\n");
+    ident(output, 1);
+    fprintf(output, "start = %ld;\n", anno.fsa.start);
+    ident(output, 1);
+    fprintf(output, "finals = {\n");
+    bool first = true;
+    for (long f : anno.fsa.finals)  {
+        if (first) {
+            first = false;
+        } else {
+            fprintf(output, ",");
+        }
+        fprintf(output, "%ld", f);
+    }
+    fprintf(output, "};\n");
+    fprintf(output, "};\n\n");
+
+    printf("Compiling actions\n");
+    compile_actions(stmt);
 }
 
+void generate_header(Module *mod) {
+    fprintf(output, "// Generate by hh, %s\n", mod->filename.c_str());
+    fprintf(output, "#include <vector>\n");
+    fprintf(output, "\n");
+}
+
+void generate_body(Module *mod) {
+    for (Stmt *x = mod->toplevel; x; x = x->next) {
+        if (auto xx = dynamic_cast<DefineStmt*>(x)) {
+            if (xx->export_) {
+                generate_export(xx);
+            } else if (auto xx = dynamic_cast<CppStmt*>(x)) {
+                fprintf(output, "%s", xx->code.c_str());
+            }
+        }
+    }
+}
 
