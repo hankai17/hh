@@ -314,7 +314,7 @@ void compile_actions(DefineStmt *stmt) {
                     ++i;
                 }
                 if (i == ie || i->first != j->first) {
-                    for (auto action : i->first->entering) {
+                    for (auto action : j->first->entering) {
                         ident(output, 3);
                         fprintf(output, "{%s}\n", get_code(action).c_str());
                     }
