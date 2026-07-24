@@ -6,7 +6,7 @@
 #include <string>
 #include <sstream>
 
-//#define DEBUG_CLS 0
+//#define DEBUG_CLS 1
 
 template <class T>
 struct Visitor;

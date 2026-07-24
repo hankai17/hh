@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <algorithm>
 
-//#define DEBUG_COMP 1
+#define DEBUG_COMP 1
 
 static std::map<DefineStmt *, FsaAnno> compiled;
 
@@ -107,6 +107,9 @@ struct Compiler : Visitor<Expr> {
             expr.anc.assign(1, nullptr);
         }
         path.push(&expr);
+#ifdef DEBUG_COMP
+        //printf("%s(%ld-%ld)", expr.name().c_str(), expr.loc.start, expr.loc.end);
+#endif
     }
 
     void post_expr(Expr &expr) {
@@ -149,7 +152,6 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
         visit(*expr.lhs);
-        path.pop();
         st.top().concat(rhs, expr);
     }
 
@@ -412,8 +414,8 @@ void generate_export(DefineStmt *stmt) {
 
     if (1 && !stmt->intact) {
         printf("Constructing substring grammar\n");
-        anno.determinize();
-        anno.minimize();
+        //anno.determinize();
+        //anno.minimize();
         anno.substring_grammar();
     }
 
@@ -444,7 +446,7 @@ void generate_export(DefineStmt *stmt) {
     ident(output, 1);
     fprintf(output, "start = %ld;\n", anno.fsa.start);
     ident(output, 1);
-    fprintf(output, "finals = {\n");
+    fprintf(output, "finals = {");
     bool first = true;
     for (long f : anno.fsa.finals)  {
         if (first) {

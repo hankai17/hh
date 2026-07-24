@@ -1,12 +1,8 @@
-#ws = [ \t\r\n]+
-#opt_ws = [ \t\r\n]*
-#ident = [a-zA-Z_] [a-zA-Z0-9_]*
-#number = [0-9]+
+number = [0]
+op = '='
 
-number = [0]+
-#op = '='
-#export expr_atom = number !op
-#
-#import "3.txt"
-#c = b3
+import "3.txt"
+c = b3
+
+export attack = number !op
 
