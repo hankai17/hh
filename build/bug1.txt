@@ -1,0 +1,3 @@
+str = 'adg'
+export ref = !str
+

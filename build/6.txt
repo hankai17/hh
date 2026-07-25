@@ -1,0 +1,6 @@
+digit = [9]
+#number = digit digit
+number = !digit !digit
+#export attack = !number !digit
+export attack = !number !number
+

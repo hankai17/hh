@@ -516,7 +516,8 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     }
 
     void visit(CollapseExpr &expr) override {
-        printf("%*s%s\n", 2 * depth, "", "CollapseExpr");
+        std::string info = expr.dump_info();
+        printf("%*s%s%s\n", 2 * depth, "", "CollapseExpr: ", info.c_str());
         printf("%*s", 2 * (depth + 1), "");
         if (expr.qualified.size()) {
             printf("%s.%s\n", expr.qualified, expr.ident.c_str());

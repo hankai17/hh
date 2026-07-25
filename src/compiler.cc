@@ -19,14 +19,22 @@ static void print_assoc(const FsaAnno &anno) {
         printf("%ld: ", i);
         for (auto aa : anno.assoc[i]) {
             auto a = aa.first;
+            auto tag = aa.second;
             const char *name = typeid(*a).name();
             while (name && isdigit(name[0])) {
                 name++;
             }
             std::string t = name;
             t = t.substr(t.size() - 4);
-            printf(" %s(%ld-%ld", t.c_str(),
-                    a->loc.start, a->loc.end);
+            std::string st_name;
+            if (a->stmt) {
+                st_name = a->stmt->lhs;
+            }
+            printf(" %s %s%d(%ld-%ld", st_name.c_str(),
+                    t.c_str(),
+                    (int)tag,
+                    a->loc.start,
+                    a->loc.end);
             if (a->entering.size()) {
                 printf(",>%zd", a->entering.size());
             }
@@ -108,7 +116,11 @@ struct Compiler : Visitor<Expr> {
         }
         path.push(&expr);
 #ifdef DEBUG_COMP
-        //printf("%s(%ld-%ld)", expr.name().c_str(), expr.loc.start, expr.loc.end);
+        printf("expr:(%ld-%ld), depth:%ld, stmt:%s\n",
+                expr.loc.start,
+                expr.loc.end,
+                expr.depth,
+                expr.stmt->lhs.c_str());
 #endif
     }
 
@@ -142,7 +154,9 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit CollapseExpr" << std::endl;
 #endif
-        st.push(FsaAnno::collapse(expr));
+        //st.push(FsaAnno::collapse(expr));
+        auto anno = FsaAnno::collapse(expr);
+        st.push(anno);
     }
 
     void visit(ConcatExpr &expr) override {
@@ -349,9 +363,9 @@ void compile_actions(DefineStmt *stmt) {
     fprintf(output, "}\n");
 }
 
-void generate_export(DefineStmt *stmt) {
-    printf("Exporting %s\n", stmt->lhs.c_str());
-    FsaAnno &anno = compiled[stmt];
+void generate_export(DefineStmt *stmt) {                                // 展开所有 & 引用（CollapseExpr） 把被引用的自动机状态合并进来
+    printf("Exporting %s\n", stmt->lhs.c_str());                        //  用 ε 转移连接引用点 最终构造一个完整的、不依赖其他定义的状态机
+    FsaAnno &anno = compiled[stmt];                                     //  注意这里只修改 anno 不会改变 stmt 语法树
 
     printf("Construct automato with all referenced CollapseExpr's DefineStmt\n");
     std::vector<std::vector<std::pair<long, long>>> adj;
@@ -365,6 +379,12 @@ void generate_export(DefineStmt *stmt) {
         }
         printf("Allocate %ld to %s\n", allo, stmt->lhs.c_str());
         FsaAnno &anno = compiled[stmt];
+
+        printf("---------------------->\n");
+        print_fsa(anno.fsa);
+        print_assoc(anno);
+        printf("<----------------------\n");
+
         long old = stmt2offset[stmt] = allo;
         allo += anno.fsa.n() + 1;
         adj.insert(adj.end(), ALL(anno.fsa.adj));
@@ -377,10 +397,10 @@ void generate_export(DefineStmt *stmt) {
         assoc.insert(assoc.end(), ALL(anno.assoc));
         assoc.emplace_back();
         FOR (i, old, old + anno.fsa.n()) {
-            if (anno.fsa.has(i - old, 256)) {
+            if (anno.fsa.has(i - old, 256)) {                               // 这个状态有引用转移
                 for (auto aa : assoc[i]) {
-                    if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {
-                        DefineStmt *v = e->define_stmt;
+                    if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {  // 找到 引用转移的边
+                        DefineStmt *v = e->define_stmt;                     // 找到 最原始处的定义
                         allocate_collapse(v);
                         sorted_insert(adj[i],
                                 std::make_pair(-1L, stmt2offset[v] + compiled[v].fsa.start));
