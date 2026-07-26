@@ -1,0 +1,8 @@
+digit = [9]
+digit1 = [8]
+#number = digit digit   #不支持embed
+number = !digit !digit
+#export attack = !number !digit
+#export attack = !number !number
+export attack = !number !digit1
+

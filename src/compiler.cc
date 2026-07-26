@@ -432,6 +432,11 @@ void generate_export(DefineStmt *stmt) {                                // å±•å¼
     anno.assoc = std::move(assoc);
     anno.deterministic = false;
 
+    printf("last---------------------->\n");
+    print_fsa(anno.fsa);
+    print_assoc(anno);
+    printf("last<----------------------\n");
+
     if (1 && !stmt->intact) {
         printf("Constructing substring grammar\n");
         //anno.determinize();
