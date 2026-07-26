@@ -21,8 +21,12 @@ struct FsaAnno {
     static FsaAnno dot(DotExpr *expr);
     static FsaAnno epsilon(EpsilonExpr *expr);
     static FsaAnno literal(LiteralExpr &expr);
+    static FsaAnno unicode_range(UnicodeRangeExpr &expr);
 
+    void accessible();
+    void co_accessible();
     void add_assoc(Expr &expr);
+    void complement(ComplementExpr *expr);
     void concat(FsaAnno &rhs, ConcatExpr *expr);
     void determinize();
     void difference(FsaAnno &rhs, DifferenceExpr *expr);

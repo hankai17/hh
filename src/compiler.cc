@@ -65,8 +65,25 @@ static void print_fsa(const Fsa &fsa) {
     puts("edges:");
     REP (i, fsa.n()) {
         printf("%ld: ", i);
+        /*
         for (auto &x : fsa.adj[i]) {
             printf(" (%ld, %ld)", x.first, x.second);
+        }
+        */
+        for (auto it = fsa.adj[i].begin(); it != fsa.adj[i].end();) {
+            long from = it->first;
+            long to = from;
+            long v = it->second;
+            while (++it != fsa.adj[i].end() &&
+                    it->first == to + 1 &&
+                    it->second == v) {
+                to++;
+            }
+            if (from == to) {
+                printf(" (%ld,%ld)", from, v);
+            } else {
+                printf(" (%ld-%ld,%ld)", from, to, v);
+            }
         }
         puts("");
     }
@@ -89,13 +106,14 @@ Expr *find_lca(Expr *u, Expr *v) {
     }
     if (v->depth) {
         for (long k = 63 - __builtin_clzl(v->depth); k >= 0; k--) {
-            if (u->anc[k] != v->anc[k]) {
+            if (k < u->anc.size() &&
+                    u->anc[k] != v->anc[k]) {
                 u = u->anc[k];
                 v = v->anc[k];
             }
         }
     }
-    return u->anc[0] == v->anc[0] ? u->anc[0] : NULL;
+    return u->anc[0];
 }
 
 struct Compiler : Visitor<Expr> {
@@ -157,6 +175,14 @@ struct Compiler : Visitor<Expr> {
         //st.push(FsaAnno::collapse(expr));
         auto anno = FsaAnno::collapse(expr);
         st.push(anno);
+    }
+
+    void visit(ComplementExpr &expr) override {
+#ifdef DEBUG_COMP
+        std::cout << "Compiler visit ComplementExpr" << std::endl;
+#endif
+        visit(*expr.inner);
+        st.top().complement(&expr);
     }
 
     void visit(ConcatExpr &expr) override {
@@ -252,6 +278,13 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.lhs);
         st.top().union_(rhs, &expr);
     }
+
+    void visit(UnicodeRangeExpr &expr) override {
+#ifdef DEBUG_COMP
+        std::cout << "Compiler visit UnicodeRangeExpr" << std::endl;
+#endif
+        st.push(FsaAnno::unicode_range(expr));
+    }
 };
 
 void compile(DefineStmt *stmt) {
@@ -262,6 +295,8 @@ void compile(DefineStmt *stmt) {
     Compiler comp;
     comp.visit(*stmt->rhs);
     anno = std::move(comp.st.top());
+    anno.determinize();
+    anno.minimize();
 }
 
 void compile_actions(DefineStmt *stmt) {
@@ -319,10 +354,21 @@ void compile_actions(DefineStmt *stmt) {
         fprintf(output, "case %ld:\n", u);
         ident(output, 2);
         fprintf(output, "switch (c) {\n");
-        for (auto &e : anno.fsa.adj[u]) {
-            long v = e.second;
+        for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end();) {
+            long from = it->first;
+            long to = from;
+            long v = it->second;
+            while (++it != anno.fsa.adj[u].end() &&
+                    it->first == to + 1 &&
+                    it->second == v) {
+                to++;
+            }
             ident(output, 2);
-            fprintf(output, "case %ld:\n", e.first);
+            if (from == to) {
+                fprintf(output, "case %ld:\n", from);
+            } else {
+                fprintf(output, "case %ld ... %ld:\n", from, to);
+            }
             ident(output, 3);
             fprintf(output, "v = %ld;\n", v);
             auto ie = withins[u].end();
@@ -378,7 +424,7 @@ void compile_actions(DefineStmt *stmt) {
     fprintf(output, "}\n");
 }
 
-void generate_export(DefineStmt *stmt) {                                // 展开所有 & 引用（CollapseExpr） 把被引用的自动机状态合并进来
+void compile_export(DefineStmt *stmt) {                                // 展开所有 & 引用（CollapseExpr） 把被引用的自动机状态合并进来
     printf("Exporting %s\n", stmt->lhs.c_str());                        //  用 ε 转移连接引用点 最终构造一个完整的、不依赖其他定义的状态机
     FsaAnno &anno = compiled[stmt];                                     //  注意这里只修改 anno 不会改变 stmt 语法树
 
@@ -454,14 +500,17 @@ void generate_export(DefineStmt *stmt) {                                // 展�
 
     if (1 && !stmt->intact) {
         printf("Constructing substring grammar\n");
-        //anno.determinize();
-        //anno.minimize();
         anno.substring_grammar();
     }
 
     printf("Determinize minimize, remove dead states\n");
     anno.determinize();
     anno.minimize();
+
+    anno.accessible();
+    anno.co_accessible();
+
+    /*
     allo = 0;
     auto relate = [&] (long x) {
         if (allo != x) {
@@ -475,11 +524,17 @@ void generate_export(DefineStmt *stmt) {                                // 展�
     } else {
         anno.assoc.resize(allo);
     }
+    */
 
     if (1) {
         print_fsa(anno.fsa);
         print_assoc(anno);
     }
+}
+
+void generate_cxx_export(DefineStmt *stmt) {
+    compile_export(stmt);
+    FsaAnno &anno = compiled[stmt];
 
     fprintf(output, "void hh_%s_init(long &start, std::vector<long> &finals)\n", stmt->lhs.c_str());
     fprintf(output, "{\n");
@@ -503,17 +558,80 @@ void generate_export(DefineStmt *stmt) {                                // 展�
     compile_actions(stmt);
 }
 
-void generate_header(Module *mod) {
+void generate_graphviz(Module *mod) {
+    fprintf(output, "Generate by hh, %s\n", mod->filename.c_str());
+    for (Stmt *x = mod->toplevel; x; x = x->next) {
+        if (auto stmt = dynamic_cast<DefineStmt*>(x)) {
+            if (stmt->export_) {
+                compile_export(stmt);
+                FsaAnno &anno = compiled[stmt];
+                fprintf(output, "digraph \"%s\" {\n", mod->filename.c_str());
+                bool start_is_final = false;
+
+                ident(output, 1);
+                fprintf(output, "node[shape=doublecircle,color=olivedrab1,style=filled,fontname=Monospace];");
+                for (long f : anno.fsa.finals) {
+                    if (f == anno.fsa.start) {
+                        start_is_final = true;
+                    } else {
+                        fprintf(output, " %ld", f);
+                    }
+                }
+                fprintf(output, "\n");
+
+                ident(output, 1);
+                if (start_is_final) {
+                    fprintf(output, "node[shape=doublecircle,color=orchid];");
+                } else {
+                    fprintf(output, "node[shape=circle,color=orchid];");
+                }
+                fprintf(output, " %ld\n", anno.fsa.start);
+
+                ident(output, 1);
+                fprintf(output, "node[shape=circle,color=black,stype=\"\"]\n");
+
+                REP (u, anno.fsa.n()) {
+                    std::unordered_map<long, std::stringstream> labels;
+                    bool first = true;
+                    auto it = anno.fsa.adj[u].begin();
+                    auto it2 = it;
+                    auto ite = anno.fsa.adj[u].end();
+                    for (; it != ite; it = it2) {
+                        long v = it->first;
+                        while (++it2 != ite && it->second == it2->second) {
+                            v = it2->first;
+                        }
+                        std::stringstream &lb = labels[it->second];
+                        if (!lb.str().empty()) {
+                            lb << ",";
+                        }
+                        if (it->first == v) {
+                            lb << v;
+                        } else {
+                            lb << it->first << "-" << v;
+                        }
+                    }
+                    for (auto &lb : labels) {
+                        ident(output, 1);
+                        fprintf(output, "%ld -> %ld[label=\"%s\"]\n",
+                                u, lb.first, lb.second.str().c_str());
+                    }
+    
+                }
+            }
+        }
+    }
+    fprintf(output, "}\n");
+}
+
+void generate_cxx(Module *mod) {
     fprintf(output, "// Generate by hh, %s\n", mod->filename.c_str());
     fprintf(output, "#include <vector>\n");
     fprintf(output, "\n");
-}
-
-void generate_body(Module *mod) {
     for (Stmt *x = mod->toplevel; x; x = x->next) {
         if (auto xx = dynamic_cast<DefineStmt*>(x)) {
             if (xx->export_) {
-                generate_export(xx);
+                generate_cxx_export(xx);
             } else if (auto xx = dynamic_cast<CppStmt*>(x)) {
                 fprintf(output, "%s", xx->code.c_str());
             }

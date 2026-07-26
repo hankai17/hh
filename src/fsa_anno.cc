@@ -5,6 +5,8 @@
 #include <cassert>
 #include <string.h>
 #include <limits.h>
+#include <map>
+#include <unicode/utf8.h>
 
 bool operator<(ExprTag x, ExprTag y) {
     return long(x) < long(y);
@@ -64,9 +66,11 @@ FsaAnno FsaAnno::epsilon(EpsilonExpr *expr) {
     r.fsa.start = 0;
     r.fsa.finals.push_back(0);
     r.fsa.adj.resize(1);
+    r.assoc.resize(1);
     if (expr) {
         r.add_assoc(*expr);
     }
+    r.deterministic = true;
     return r;
 }
 
@@ -83,6 +87,101 @@ FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     r.add_assoc(expr);
     r.deterministic = true;
     return r;
+}
+
+FsaAnno FsaAnno::unicode_range(UnicodeRangeExpr &expr) {
+    FsaAnno r;
+    long n = 0;
+    struct Trie {
+        long id = 1;
+        long refcnt = 1;
+        std::map<int, Trie*> ch;
+        ~Trie() {
+            for (auto c : ch) {
+                if (!--c.second->refcnt) {
+                    delete c.second;
+                }
+            }
+        }
+    } root;
+    root.id = n++;
+    r.fsa.start = 0;
+
+    Trie *last = NULL;
+    FOR (i, expr.start, expr.end) {
+        u8 s[4];
+        long len = 0;
+        U8_APPEND_UNSAFE(s, len, i);
+        Trie *x = &root;
+        Trie *y;
+        REP (j, len) {
+            auto it = x->ch.find(s[j]);
+            if (it == x->ch.end()) {
+                if (j == len - 1 && last) {
+                    y = last;
+                    y->refcnt++;
+                } else {
+                    y = new Trie;
+                    y->id = n++;
+                }
+                x->ch[s[j]] = y;
+                x = y;
+            } else {
+                x = it->second;
+            }
+        }
+        if (!last) {
+            last = x;
+        }
+        r.fsa.finals.push_back(x->id);
+    }
+
+    r.fsa.adj.resize(n);
+    std::function<void(Trie*)> dfs = [&] (Trie *x) {
+        for (auto &c : x->ch) {
+            r.fsa.adj[x->id].emplace_back(c.first, c.second->id);
+            dfs(c.second);
+        }
+    };
+    dfs(&root);
+    std::sort(ALL(r.fsa.finals));
+    r.assoc.resize(n);
+    r.add_assoc(expr);
+    return r;
+}
+
+void FsaAnno::accessible() {
+    long allo = 0;
+    auto relate = [&] (long x) {
+        if (allo != x) {
+            assoc[allo] = std::move(assoc[x]);
+        }
+        allo++;
+    };
+    fsa.accessible(relate);
+    assoc.resize(allo);
+}
+
+void FsaAnno::co_accessible() {
+    long allo = 0;
+    auto relate = [&] (long x) {
+        if (allo != x) {
+            assoc[allo] = std::move(assoc[x]);
+        }
+        allo++;
+    };
+    fsa.co_accessible(relate);
+    if (fsa.finals.empty()) {
+        assoc.assign(1, {});
+        deterministic = true;
+        return;
+    }
+    if (!deterministic) {
+        REP (i, fsa.n()) {
+            std::sort(ALL(fsa.adj[i]));
+        }
+    }
+    assoc.resize(allo);
 }
 
 /*
@@ -117,6 +216,11 @@ void FsaAnno::add_assoc(Expr &expr) {
         }
         sorted_insert(assoc[i], std::make_pair(&expr, tag));
     }
+}
+
+void FsaAnno::complement(ComplementExpr *expr) {
+    fsa = ~fsa;
+    assoc.assign(fsa.n(), {});
 }
 
 void FsaAnno::concat(FsaAnno& rhs, ConcatExpr *expr) {

@@ -335,6 +335,9 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
         if (vis[u] == 2) {
             return false;
         }
+        if (vis[u] == 3) {
+            return true;
+        }
         if (vis[u] == 1) {
             u->module->locfile.locate(u->loc, "'%s': circular embedding", u->lhs.c_str());
             long i = st.size();
@@ -343,6 +346,7 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
             }
             st.push_back(st[i - 1]);
             for (; i < st.size(); i++) {
+                vis[st[i]] = 3;
                 st[i]->module->locfile.locate(st[i]->loc, "required by %s",
                         st[i]->lhs.c_str());
             }
@@ -351,20 +355,20 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
         }
         vis[u] = 1;
         st.push_back(u);
+        bool cycle = false;
         for (auto v : depended_by[u]) {
             if (dfs(v)) {
-                return true;
+                cycle = true;
             }
         }
         st.pop_back();
         vis[u] = 2;
         topo.push_back(u);
-        return false;
+        return cycle;
     };
     for (auto &d : depended_by) {
         if (dfs(d.first)) {
             n_errors++;
-            return topo;
         }
     }
     std::reverse(ALL(topo));
@@ -448,11 +452,11 @@ long load(const std::string &filename) {
 
     output = stdout;
 
-    printf("\nGenerating header\n");
-    generate_header(mod);
+    printf("\nGenerating C++\n");
+    generate_cxx(mod);
 
-    printf("\nGenerating body\n");
-    generate_body(mod);
+    printf("\nGenerating Graphviz dot\n");
+    generate_graphviz(mod);
 
     fclose(output);
     return n_errors;

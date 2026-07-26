@@ -40,6 +40,7 @@ struct Expr;
 struct BracketExpr;     // 字符集表达式: 最常见的字符类，比如正则中的 [a-z0-9] 这里的括号是[]
 struct ClosureExpr;     // 闭包表达式: 对应正则中的 * 重复操作 0次或多次
 struct CollapseExpr;    // 折叠表达式: 使用 ! 操作符引用的非终结符 不记账递归
+struct ComplementExpr;
 struct ConcatExpr;      // 连接表达式: 隐式默认存在 常见的组合方式 
 struct DifferenceExpr;  // 差集表达式: [a-z] - [aeiou] 可以匹配辅音字母
 struct DotExpr;
@@ -50,6 +51,7 @@ struct LiteralExpr;
 struct MaybeExpr;
 struct PlusExpr;        // 正闭包表达式: 对应正则中的 +
 struct RepeatExpr;
+struct UnicodeRangeExpr;
 struct UnionExpr;       // 并集表达式: 或关系 |
 
 template <>
@@ -58,6 +60,7 @@ struct Visitor<Expr> {                              // 1 visitor虚基类定义e
     virtual void visit(BracketExpr &) = 0;
     virtual void visit(ClosureExpr &) = 0;
     virtual void visit(CollapseExpr &) = 0;
+    virtual void visit(ComplementExpr &) = 0;
     virtual void visit(ConcatExpr &) = 0;
     virtual void visit(DifferenceExpr &) = 0;
     virtual void visit(DotExpr &) = 0;
@@ -68,6 +71,7 @@ struct Visitor<Expr> {                              // 1 visitor虚基类定义e
     virtual void visit(MaybeExpr &) = 0;
     virtual void visit(PlusExpr &) = 0;
     virtual void visit(RepeatExpr &) = 0;
+    virtual void visit(UnicodeRangeExpr &) = 0;
     virtual void visit(UnionExpr &) = 0;
 };
 
@@ -208,6 +212,19 @@ struct ClosureExpr : Visitable<Expr, ClosureExpr> {
     ~ClosureExpr() { delete inner; }
 };
 
+struct ComplementExpr : Visitable<Expr, ComplementExpr> {
+    Expr *inner;
+
+    ComplementExpr(Expr *inner) :
+        inner(inner) {
+#ifdef DEBUG_CLS 
+        printf("new ComplementExpr\n");
+#endif
+    }
+
+    ~ComplementExpr() { delete inner; }
+};
+
 struct ConcatExpr : Visitable<Expr, ConcatExpr> {
     Expr *lhs, *rhs;
 
@@ -330,6 +347,18 @@ struct RepeatExpr : Visitable<Expr, RepeatExpr> {
 #endif
     }
     ~RepeatExpr() { delete inner; }
+};
+
+struct UnicodeRangeExpr : Visitable<Expr, UnicodeRangeExpr> {
+    long start;
+    long end;
+    UnicodeRangeExpr(long start, long end) :
+        start(start),
+        end(end) {
+#ifdef DEBUG_CLS 
+        printf("new UnicodeRangeExpr\n");
+#endif
+    }
 };
 
 struct UnionExpr : Visitable<Expr, UnionExpr> {
@@ -533,7 +562,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     void visit(ClosureExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "ClosureExpr");
         depth++;
-        expr.inner->accept(*this);
+        visit(*expr.inner);
         depth--;
     }
 
@@ -546,6 +575,13 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         } else {
             printf("%s\n", expr.ident.c_str());
         }
+    }
+
+    void visit(ComplementExpr &expr) override {
+        printf("%*s%s\n", 2 * depth, "", "ComplementExpr");
+        depth++;
+        visit(*expr.inner);
+        depth--;
     }
 
     void visit(ConcatExpr &expr) override {
@@ -614,6 +650,14 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         printf("%*s%ld,%ld\n", 2 * (depth + 1), "", expr.low, expr.high);
         depth++;
         visit(*expr.inner);
+        depth--;
+    }
+
+    void visit(UnicodeRangeExpr &expr) override {
+        printf("%*s%s\n", 2 * depth, "", "UnicodeRangeExpr");
+        ident(stdout, depth + 1);
+        printf("[%ld,%ld]\n", expr.start, expr.end);
+        depth++;
         depth--;
     }
 
@@ -751,6 +795,13 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
 #endif
     }
 
+    void visit(ComplementExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor ComplementExpr\n");
+#endif
+        visit(*expr.inner);
+    }
+
     void visit(ConcatExpr &expr) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor ConcatExpr\n");
@@ -818,6 +869,12 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         printf("visit PreorderActionExprStmtVisitor RepeatExpr\n");
 #endif
         visit(*expr.inner);
+    }
+
+    void visit(UnicodeRangeExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor UnicodeRangeExpr\n");
+#endif
     }
 
     void visit(UnionExpr &expr) override {

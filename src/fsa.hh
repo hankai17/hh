@@ -15,6 +15,8 @@ struct Fsa {
     void epsilon_closure(std::vector<long> &src) const;
 
     Fsa operator~() const;
+    void accessible(std::function<void(long)> relate);
+    void co_accessible(std::function<void(long)> relate);
     Fsa difference(const Fsa &rhs, std::function<void (long)> relate) const;
     Fsa intersect(const Fsa &rhs, std::function<void (long, long)> relate) const;
     Fsa determinize(std::function<void (const std::vector<long>&)> relate) const;

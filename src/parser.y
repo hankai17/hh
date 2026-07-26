@@ -2,9 +2,11 @@
 #include "location.hh"
 #include "syntax.hh"
 #include <limits.h>
+#include <unicode/utf8.h>
 
 using std::bitset;
 
+#define YYINITDEPTH 1000
 #define YYLTYPE Location
 #define YYLLOC_DEFAULT(Loc, Rhs, N)                 \
     do {                                            \
@@ -55,7 +57,7 @@ int parse(const LocationFile &locfile, Stmt *&res);
 %destructor { delete $$; } <charset>
 
                                                     // Token(lexer解析而得) 声明 // 告诉 Bison 哪些 token(终结符) 有值，以及值的类型
-%token ACTION AS CPP EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
+%token ACTION AS CPP DOTDOT EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
 %token <str> IDENT
 %token <str> STRING_LITERAL
@@ -67,7 +69,7 @@ int parse(const LocationFile &locfile, Stmt *&res);
                                                     // 非终结符类型 // 指定不同产生式返回值的类型
 %type <action> action
 %type <stmt> define_stmt stmt stmt_list
-%type <expr> concat_expr difference_expr factor repeat intersect_expr union_expr
+%type <expr> concat_expr difference_expr factor repeat intersect_expr union_expr unop_expr
 %type <charset> bracket bracket_items
                                                     // 用户代码段
 %{
@@ -171,6 +173,8 @@ stmt:
 
 define_stmt:
     IDENT '=' union_expr { $$ = new DefineStmt(*$1, $3); delete $1; $$->loc = yyloc; }
+    | IDENT ':' union_expr { $$ = new DefineStmt(*$1, $3); delete $1; $$->loc = yyloc; }
+    | IDENT ':' '|' union_expr { $$ = new DefineStmt(*$1, $4); delete $1; $$->loc = yyloc; }
     | EXPORT define_stmt { $$ = $2; ((DefineStmt*)$$)->export_ = true; $$->loc = yyloc; }
     | INTACT define_stmt { $$ = $2; ((DefineStmt*)$$)->intact = true; $$->loc = yyloc; }
 
@@ -186,9 +190,14 @@ difference_expr:                                    // 差集
     concat_expr { $$ = $1; }
     | difference_expr '-' concat_expr { $$ = new DifferenceExpr($1, $3); $$->loc = yyloc; }
 
+
 concat_expr:                                        // 链接
+    unop_expr { $$ = $1; }
+    | concat_expr unop_expr { $$ = new ConcatExpr($1, $2); $$->loc = yyloc; }
+
+unop_expr:                                        // 链接
     factor { $$ = $1; }
-    | concat_expr factor { $$ = new ConcatExpr($1, $2); $$->loc = yyloc; }
+    | '~' unop_expr { $$ = new ComplementExpr($2); $$->loc = yyloc; }
 
 factor:                                             // 基础因子
     EPSILON { $$ = new EpsilonExpr; $$->loc = yyloc; }
@@ -199,6 +208,26 @@ factor:                                             // 基础因子
     | STRING_LITERAL { $$ = new LiteralExpr(*$1); delete $1; $$->loc = yyloc; }
     | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
     | bracket { $$ = new BracketExpr($1); $$->loc = yyloc; }         // bracket类型 创建的AST实例类型是BracketExpr   eg: [a-z]
+    | STRING_LITERAL DOTDOT STRING_LITERAL {
+        i32 c0;
+        i32 c1;
+        i32 i = 0;
+        i32 j = 0;
+        U8_NEXT($1->c_str(), i, $1->size(), c0);
+        U8_NEXT($3->c_str(), j, $3->size(), c1);
+        delete $1;
+        delete $3;
+        if (i != $1->size() || j != $3->size()) {
+            FAIL(yyloc, "endpoints of Unicode range should be of length 1");
+            $$ = new DotExpr;
+        } else if (c0 > c1) {
+            FAIL(yyloc, "negative Unicode range");
+            $$ = new DotExpr;
+        } else {
+            $$ = new UnicodeRangeExpr(c0, c1 + 1);
+            $$->loc = yyloc;
+        }
+      }
     | '(' union_expr ')' { $$ = $2; }
     | repeat { $$ = $1; }
     | factor '>' action { $$ = $1; $$->entering.push_back($3); }

@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <unicode/utf8.h>
 
 using namespace std;
                                                     // 1.C代码段
@@ -23,6 +24,7 @@ using namespace std;
 static int my_top_state(yyscan_t yyscanner);
 static string tmp_bracket;
 static string tmp_str;
+static bool semicolon;
 
 static void unexpected_eof(YYSTYPE *yylval, const char* token_end) {
     yylval->errmsg = aprintf("Missing %s at end of file", token_end);
@@ -45,13 +47,16 @@ static void unexpected_newline(YYSTYPE *yylval, const char* token_end) {
 
                                                     // 3.状态声明: 多条件扫描状态
                                                     // 单行注释 #
+%x EXPECT_CODE
+%x EXPECT_ACTION
 %x IN_LINE_COMMENT
 %x IN_PAREN
-                                                    // {
 %x IN_ACTION
 %x IN_ACTION_OP
+                                                    // {
 %x IN_BRACE
 %x IN_CODE
+%x IN_COMMENT
                                                     // [
 %x IN_BRACKET
 %x IN_BRACKET_FIRST
@@ -84,18 +89,21 @@ IS  (u|U|l|L)*
                                                     // Flex 从左到右扫描输入，每次尝试(匹配所有规则)找到当前能匹配的最长 token，并且优先选择最先定义的规则。匹配成功后，才把这个 token 返回给 Bison。
 
 %%
-";" {}
 "::" return SEMISEMI;
+".." return DOTDOT;
+";" if (semicolon) return '\n';
 
-[-!&*=+,.?|{}] { return yytext[0]; }
+[-~!&*=+,.?|{}:] { return yytext[0]; }
 
-"action" yy_push_state(IN_ACTION, yyscanner); return ACTION;
+"action" yy_push_state(EXPECT_ACTION, yyscanner); return ACTION;
 "as" return AS;
-"c++" return CPP;
+"c++" yy_push_state(EXPECT_CODE, yyscanner); return CPP;
 "epsilon" return EPSILON;
 "export" return EXPORT;
 "import" return IMPORT;
 "intact" return INTACT;
+"semicolon" semicolon = true;
+"nosemicolon" semicolon = false;
 
 {L}({L}|{D})* {                                     // 匹配abc123 存到string里并返回IDENT
     yylval->str = new std::string(yytext);
@@ -105,10 +113,19 @@ IS  (u|U|l|L)*
 [D]+ { yylval->integer = atol(yytext); return INTEGER; }
 
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
+"//" yy_push_state(IN_LINE_COMMENT, yyscanner);
+
 <IN_LINE_COMMENT>{
     "\n" yy_pop_state(yyscanner);                   // 换行结束注释
     <<EOF>> yy_pop_state(yyscanner);
     . {}                                            // 其他字符忽略 不生成token
+}
+
+"/*" yy_push_state(IN_COMMENT, yyscanner);
+<IN_COMMENT>{
+    "*/" yy_pop_state(yyscanner);
+    <<EOF>> yy_pop_state(yyscanner);
+    .|\n {}
 }
 
 "(" yy_push_state(IN_PAREN, yyscanner); return '(';
@@ -179,7 +196,7 @@ IS  (u|U|l|L)*
 }
 
 
-<IN_ACTION>{
+<EXPECT_CODE>{
     {L}({L}|{D})* yylval->str = new std::string(yytext); return IDENT;
     "{" BEGIN IN_CODE; tmp_bracket.clear();
     [ \t]+ {}
@@ -187,9 +204,8 @@ IS  (u|U|l|L)*
     <<EOF>> yy_pop_state(yyscanner);
 }
 
-[>@%$] yy_push_state(IN_ACTION_OP, yyscanner); return yytext[0];
-
-<IN_ACTION_OP>{
+[>@%$] yy_push_state(EXPECT_ACTION, yyscanner); return yytext[0];
+<EXPECT_ACTION>{
     {L}({L}|{D})* yy_pop_state(yyscanner); yylval->str = new std::string(yytext); return IDENT;
     "{" BEGIN IN_CODE; tmp_bracket.clear();
     [ \t\n]+ {}
@@ -216,9 +232,10 @@ IS  (u|U|l|L)*
     <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "}");
 }
 
-"'" tmp_str.clear(); yy_push_state(IN_Q_STRING, yyscanner);
+' tmp_str.clear(); yy_push_state(IN_Q_STRING, yyscanner);
+"\"" tmp_str.clear(); yy_push_state(IN_QQ_STRING, yyscanner);
 <IN_Q_STRING>{
-    "'" {
+    ' {
         yy_pop_state(yyscanner);
         if (YY_START == INITIAL || YY_START == IN_PAREN) {
             yylval->str = new std::string(tmp_str);
@@ -226,14 +243,9 @@ IS  (u|U|l|L)*
         }
         tmp_bracket += yytext;
     }
-    \\' tmp_str += '\''; tmp_bracket += yytext;
-    \\\\ tmp_str += '\\'; tmp_bracket += yytext;
-    .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
     <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "'");
 }
 
-
-"\"" tmp_str.clear(); yy_push_state(IN_QQ_STRING, yyscanner);
 <IN_QQ_STRING>{
     "\"" {
         yy_pop_state(yyscanner);
@@ -243,6 +255,10 @@ IS  (u|U|l|L)*
         }
         tmp_bracket += yytext;
     }
+    <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "\"");
+}
+
+<IN_Q_STRING,IN_QQ_STRING>{
     \\[0-7]{1,3} {
       long c = strtol(yytext+1, NULL, 8);
       if (UCHAR_MAX < c) {
@@ -261,6 +277,30 @@ IS  (u|U|l|L)*
       tmp_str.push_back(c);
       tmp_bracket += yytext;
     }
+    \\u[0-9a-fA-F]+ {
+        char s[4];
+        long c = strtol(yytext + 2, NULL, 16);
+        long len = 0;
+        if (UINT16_MAX < c) {
+            yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
+            return INVALID_CHARACTER;
+        }
+        U8_APPEND_UNSAFE(s, len, c);
+        tmp_str.insert(tmp_str.end(), s, s + len);
+        tmp_bracket += yytext;
+    }
+    \\U[0-9a-fA-F]+ {
+        char s[4];
+        long c = strtol(yytext + 2, NULL, 16);
+        long len = 0;
+        if (UINT32_MAX < c) {
+            yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
+            return INVALID_CHARACTER;
+        }
+        U8_APPEND_UNSAFE(s, len, c);
+        tmp_str.insert(tmp_str.end(), s, s + len);
+        tmp_bracket += yytext;
+    }
     \\a tmp_str += '\a'; tmp_bracket += yytext;
     \\b tmp_str += '\b'; tmp_bracket += yytext;
     \\f tmp_str += '\f'; tmp_bracket += yytext;
@@ -274,11 +314,10 @@ IS  (u|U|l|L)*
       return INVALID_CHARACTER;
     }
     .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
-    <<EOF>> unexpected_eof(yylval, "\""); BEGIN INITIAL;
 }
     
 
-"\n" if (YY_START == INITIAL) return '\n';
+"\n" if (YY_START == INITIAL && !semicolon) return '\n';
 [ \t]+ {}                                         // 空字符 空动作 直接丢弃 不生成任何 token
 . {
     yylval->errmsg = strdup("Invalid character");
