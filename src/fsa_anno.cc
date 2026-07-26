@@ -4,6 +4,7 @@
 #include <utility>
 #include <cassert>
 #include <string.h>
+#include <limits.h>
 
 bool operator<(ExprTag x, ExprTag y) {
     return long(x) < long(y);
@@ -43,7 +44,7 @@ FsaAnno FsaAnno::collapse(CollapseExpr &expr) {
     return r;
 }
 
-FsaAnno FsaAnno::dot(DotExpr &expr) {
+FsaAnno FsaAnno::dot(DotExpr *expr) {
     FsaAnno r;
     r.fsa.start = 0;
     r.fsa.finals = {1};
@@ -52,9 +53,23 @@ FsaAnno FsaAnno::dot(DotExpr &expr) {
         r.fsa.adj[0].emplace_back(c, 1);
     }
     r.assoc.resize(2);
-    r.add_assoc(expr);
+    if (expr) {
+        r.add_assoc(*expr);
+    }
     return r;
 }
+
+FsaAnno FsaAnno::epsilon(EpsilonExpr *expr) {
+    FsaAnno r;
+    r.fsa.start = 0;
+    r.fsa.finals.push_back(0);
+    r.fsa.adj.resize(1);
+    if (expr) {
+        r.add_assoc(*expr);
+    }
+    return r;
+}
+
 
 FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     FsaAnno r;
@@ -104,7 +119,7 @@ void FsaAnno::add_assoc(Expr &expr) {
     }
 }
 
-void FsaAnno::concat(FsaAnno& rhs, ConcatExpr &expr) {
+void FsaAnno::concat(FsaAnno& rhs, ConcatExpr *expr) {
     long ln = fsa.n();
     long rn = rhs.fsa.n();
     for (long f : fsa.finals) {
@@ -124,7 +139,9 @@ void FsaAnno::concat(FsaAnno& rhs, ConcatExpr &expr) {
     REP (i, rhs.fsa.n()) {
         assoc[ln + i] = std::move(rhs.assoc[i]);
     }
-    add_assoc(expr);
+    if (expr) {
+        add_assoc(*expr);
+    }
     deterministic = false;
 }
 
@@ -160,7 +177,7 @@ void FsaAnno::determinize() {
     deterministic = true;
 }
 
-void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr &expr) {
+void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr *expr) {
     std::vector<std::vector<long>> rel0;
     decltype(rhs.assoc) new_assoc;
     auto relate0 = [&](const std::vector<long>& xs) {
@@ -186,11 +203,13 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr &expr) {
     }
     fsa = fsa.difference(rhs.fsa, relate);
     assoc = std::move(new_assoc);
-    add_assoc(expr);
+    if (expr) {
+        add_assoc(*expr);
+    }
     deterministic = true;
 }
 
-void FsaAnno::embed(EmbedExpr& expr) {
+void FsaAnno::embed(EmbedExpr &expr) {
     // TODO
     /*
     fsa.start = 0;
@@ -201,7 +220,7 @@ void FsaAnno::embed(EmbedExpr& expr) {
     */
 }
 
-void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr &expr) {
+void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr *expr) {
     decltype(rhs.assoc) new_assoc;
     std::vector<std::vector<long>> rel0, rel1;
     auto relate0 = [&](const std::vector<long>& xs) {
@@ -231,7 +250,9 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr &expr) {
         rhs.fsa = rhs.fsa.determinize(relate1);
     fsa = fsa.intersect(rhs.fsa, relate);
     assoc = std::move(new_assoc);
-    add_assoc(expr);
+    if (expr) {
+        add_assoc(*expr);
+    }
     deterministic = true;
 }
 
@@ -250,7 +271,7 @@ void FsaAnno::minimize() {
     assoc = std::move(new_assoc);
 }
 
-void FsaAnno::union_(FsaAnno& rhs, UnionExpr& expr) {
+void FsaAnno::union_(FsaAnno &rhs, UnionExpr *expr) {
     long ln = fsa.n();
     long rn = rhs.fsa.n();
     long src = ln + rn;
@@ -272,19 +293,23 @@ void FsaAnno::union_(FsaAnno& rhs, UnionExpr& expr) {
     REP (i, rhs.fsa.n()) {
         assoc[ln + i] = std::move(rhs.assoc[i]);
     }
-    add_assoc(expr);
+    if (expr) {
+        add_assoc(*expr);
+    }
     deterministic = false;
 }
 
-void FsaAnno::plus(PlusExpr &expr) {
+void FsaAnno::plus(PlusExpr *expr) {
     for (long f: fsa.finals) {
         sorted_insert(fsa.adj[f], std::make_pair(-1L, fsa.start));
     }
-    add_assoc(expr);
+    if (expr) {
+        add_assoc(*expr);
+    }
     deterministic = false;
 }
 
-void FsaAnno::question(MaybeExpr& expr) {
+void FsaAnno::question(MaybeExpr *expr) {
     long src = fsa.n();
     long sink = src + 1;
     long old_src = fsa.start;
@@ -296,11 +321,40 @@ void FsaAnno::question(MaybeExpr& expr) {
     fsa.adj[src].emplace_back(-1, sink);
     fsa.finals.push_back(sink);
     assoc.resize(fsa.n());
-    add_assoc(expr);
+    if (expr) {
+        add_assoc(*expr);
+    }
     deterministic = false;
 }
 
-void FsaAnno::star(ClosureExpr& expr) {
+void FsaAnno::repeat(RepeatExpr &expr) {
+    FsaAnno r = epsilon(NULL);
+    REP (i, expr.low) {
+        FsaAnno t = *this;
+        r.concat(t, NULL);
+    }
+    if (expr.high == LONG_MAX) {
+        star(NULL);
+        r.concat(*this, NULL);
+    } else if (expr.low < expr.high) {
+        FsaAnno rhs = epsilon(NULL);
+        FsaAnno x = *this;
+        ROF (i, 0, expr.high - expr.low) {
+            FsaAnno t = x;
+            rhs.union_(t, NULL);
+            if (i) {
+                t = *this;
+                x.concat(t, NULL);
+            }
+        }
+        r.concat(rhs, NULL);
+    }
+    r.deterministic = false;
+    *this = std::move(r);
+}
+
+
+void FsaAnno::star(ClosureExpr *expr) {
     long src = fsa.n();
     long sink = src + 1;
     long old_src = fsa.start;
@@ -316,7 +370,9 @@ void FsaAnno::star(ClosureExpr& expr) {
     }
     fsa.finals.assign(1, sink);
     assoc.resize(fsa.n());
-    add_assoc(expr);
+    if (expr) {
+        add_assoc(*expr);
+    }
     deterministic = false;
 }
 

@@ -44,10 +44,12 @@ struct ConcatExpr;      // 连接表达式: 隐式默认存在 常见的组合�
 struct DifferenceExpr;  // 差集表达式: [a-z] - [aeiou] 可以匹配辅音字母
 struct DotExpr;
 struct EmbedExpr;       // 嵌入表达式: 普通引用一个非终结符（没有 ! 或 & 修饰符） // 用于表示一个标识符（变量名、子模式名等）直接作为表达式使用
+struct EpsilonExpr;
 struct IntersectExpr;
 struct LiteralExpr;
 struct MaybeExpr;
 struct PlusExpr;        // 正闭包表达式: 对应正则中的 +
+struct RepeatExpr;
 struct UnionExpr;       // 并集表达式: 或关系 |
 
 template <>
@@ -60,10 +62,12 @@ struct Visitor<Expr> {                              // 1 visitor虚基类定义e
     virtual void visit(DifferenceExpr &) = 0;
     virtual void visit(DotExpr &) = 0;
     virtual void visit(EmbedExpr &) = 0;
+    virtual void visit(EpsilonExpr &) = 0;
     virtual void visit(IntersectExpr &) = 0;
     virtual void visit(LiteralExpr &) = 0;
     virtual void visit(MaybeExpr &) = 0;
     virtual void visit(PlusExpr &) = 0;
+    virtual void visit(RepeatExpr &) = 0;
     virtual void visit(UnionExpr &) = 0;
 };
 
@@ -235,7 +239,6 @@ struct DotExpr : Visitable<Expr, DotExpr> {
     // TODO
 };
 
-
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
     std::string qualified;
     std::string ident;
@@ -252,6 +255,9 @@ struct EmbedExpr : Visitable<Expr, EmbedExpr> {
 
     ~EmbedExpr() {
     }
+};
+
+struct EpsilonExpr : Visitable<Expr, EpsilonExpr> {
 };
 
 struct IntersectExpr : Visitable<Expr, IntersectExpr> {
@@ -308,6 +314,22 @@ struct PlusExpr : Visitable<Expr, PlusExpr> {
 #endif
     }
     ~PlusExpr() { delete inner; }
+};
+
+struct RepeatExpr : Visitable<Expr, RepeatExpr> {
+    Expr *inner;
+    long low;
+    long high;
+
+    RepeatExpr(Expr *inner, long low, long high) :
+        inner(inner),
+        low(low),
+        high(high) {
+#ifdef DEBUG_CLS 
+        printf("new RepeatExpr\n");
+#endif
+    }
+    ~RepeatExpr() { delete inner; }
 };
 
 struct UnionExpr : Visitable<Expr, UnionExpr> {
@@ -556,6 +578,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         }
     }
 
+    void visit(EpsilonExpr &expr) override {
+        printf("%*s%s\n", 2 * depth, "", "EpsilonExpr");
+    }
+
     void visit(IntersectExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "IntersectExpr");
         depth++;
@@ -578,6 +604,14 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
     void visit(PlusExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "PlusExpr");
+        depth++;
+        visit(*expr.inner);
+        depth--;
+    }
+
+    void visit(RepeatExpr &expr) override {
+        printf("%*s%s\n", 2 * depth, "", "RepeatExpr");
+        printf("%*s%ld,%ld\n", 2 * (depth + 1), "", expr.low, expr.high);
         depth++;
         visit(*expr.inner);
         depth--;
@@ -745,6 +779,12 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
 #endif
     }
 
+    void visit(EpsilonExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor EpsilonExpr\n");
+#endif
+    }
+
     void visit(IntersectExpr &expr) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor IntersectExpr\n");
@@ -769,6 +809,13 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
     void visit(PlusExpr &expr) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor PlusExpr\n");
+#endif
+        visit(*expr.inner);
+    }
+
+    void visit(RepeatExpr &expr) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor RepeatExpr\n");
 #endif
         visit(*expr.inner);
     }

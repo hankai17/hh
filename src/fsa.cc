@@ -294,10 +294,14 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
     }
 
     std::set<std::pair<long, long>> refines;
-
-    if (x >= 0 || y >= 0) {
+    if (fx >= 0) {
         REP (a, 256 + 1) {
-            refines.emplace(a, fy < 0 || fx >= 0 && C[fx] < C[fy] ? fx : fy);
+            refines.emplace(a, fx);
+        }
+    }
+    if (fy >= 0) {
+        REP (a, 256 + 1) {
+            refines.emplace(a, fy);
         }
     }
                                                     // ------> 0 eg: 所有字符[a-zA-Z]均被分到fx中了 

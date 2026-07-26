@@ -1,6 +1,7 @@
 %code requires {
 #include "location.hh"
 #include "syntax.hh"
+#include <limits.h>
 
 using std::bitset;
 
@@ -48,14 +49,13 @@ int parse(const LocationFile &locfile, Stmt *&res);
 }
 
 %destructor { delete $$; } <str>
-%destructor { free($$); }  <string>
 %destructor { delete $$; } <action>
 %destructor { delete $$; } <expr>
 %destructor { delete $$; } <stmt>
 %destructor { delete $$; } <charset>
 
                                                     // Token(lexer解析而得) 声明 // 告诉 Bison 哪些 token(终结符) 有值，以及值的类型
-%token ACTION AS CPP EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
+%token ACTION AS CPP EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
 %token <str> IDENT
 %token <str> STRING_LITERAL
@@ -67,7 +67,7 @@ int parse(const LocationFile &locfile, Stmt *&res);
                                                     // 非终结符类型 // 指定不同产生式返回值的类型
 %type <action> action
 %type <stmt> define_stmt stmt stmt_list
-%type <expr> concat_expr difference_expr factor intersect_expr union_expr
+%type <expr> concat_expr difference_expr factor repeat intersect_expr union_expr
 %type <charset> bracket bracket_items
                                                     // 用户代码段
 %{
@@ -126,6 +126,15 @@ int yylex(YYSTYPE *yylval, YYLTYPE *loc, Stmt *&res, long &errors,
 */
     return token;
 }
+
+#define gen_repeat(x, inner, low, high) \
+    if (low < 0) {                      \
+        FAIL(yyloc, "negative");        \
+    }                                   \
+    if (low > high) {                   \
+        FAIL(yyloc, "low > high");      \
+    }                                   \
+    x = new RepeatExpr(inner, low, high)
 %}
                                                     
                                                     // 语法规则
@@ -182,7 +191,8 @@ concat_expr:                                        // 链接
     | concat_expr factor { $$ = new ConcatExpr($1, $2); $$->loc = yyloc; }
 
 factor:                                             // 基础因子
-    IDENT { std::string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }         // IDENT类型 创建的AST实例类型是EmbedExpr       eg: abc
+    EPSILON { $$ = new EpsilonExpr; $$->loc = yyloc; }
+    | IDENT { std::string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }         // IDENT类型 创建的AST实例类型是EmbedExpr       eg: abc
     | IDENT SEMISEMI IDENT { $$ = new EmbedExpr(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
     | '!' IDENT { std::string t; $$ = new CollapseExpr(t, *$2); delete $2; $$->loc = yyloc; }// &IDENT ...                                   eg: &ref
     | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }   // ?
@@ -190,6 +200,7 @@ factor:                                             // 基础因子
     | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
     | bracket { $$ = new BracketExpr($1); $$->loc = yyloc; }         // bracket类型 创建的AST实例类型是BracketExpr   eg: [a-z]
     | '(' union_expr ')' { $$ = $2; }
+    | repeat { $$ = $1; }
     | factor '>' action { $$ = $1; $$->entering.push_back($3); }
     | factor '@' action { $$ = $1; $$->finishing.push_back($3); }
     | factor '%' action { $$ = $1; $$->leaving.push_back($3); }
@@ -197,6 +208,12 @@ factor:                                             // 基础因子
     | factor '?' { $$ = new MaybeExpr($1); $$->loc = yyloc; }
     | factor '*' { $$ = new ClosureExpr($1); $$->loc = yyloc; }
     | factor '+' { $$ = new PlusExpr($1); $$->loc = yyloc; }
+
+repeat:
+    factor '{' INTEGER ',' INTEGER '}' { gen_repeat($$, $1, $3, $5); $$->loc = yyloc; }
+    | factor '{' INTEGER ',' '}' { gen_repeat($$, $1, $3, LONG_MAX); $$->loc = yyloc; }
+    | factor '{' INTEGER '}' { gen_repeat($$, $1, $3, $3); $$->loc = yyloc; }
+    | factor '{' ',' INTEGER '}' { gen_repeat($$, $1, 0, $4); $$->loc = yyloc; }
 
 action:
     IDENT { std::string t; $$ = new RefAction(t, *$1); delete $1; $$->loc = yyloc; }

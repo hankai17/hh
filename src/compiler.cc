@@ -147,7 +147,7 @@ struct Compiler : Visitor<Expr> {
         std::cout << "Compiler visit ClosureExpr" << std::endl;
 #endif
         visit(*expr.inner);
-        st.top().star(expr);
+        st.top().star(&expr);
     }
 
     void visit(CollapseExpr &expr) override {
@@ -166,7 +166,7 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
         visit(*expr.lhs);
-        st.top().concat(rhs, expr);
+        st.top().concat(rhs, &expr);
     }
 
     void visit(DifferenceExpr &expr) override {
@@ -176,14 +176,14 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
         visit(*expr.lhs);
-        st.top().difference(rhs, expr);
+        st.top().difference(rhs, &expr);
     }
 
     void visit(DotExpr &expr) override {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit DotExpr" << std::endl;
 #endif
-        st.push(FsaAnno::dot(expr));
+        st.push(FsaAnno::dot(&expr));
     }
 
     void visit(EmbedExpr &expr) override {
@@ -195,6 +195,13 @@ struct Compiler : Visitor<Expr> {
         st.push(anno);
     }
 
+    void visit(EpsilonExpr &expr) override {
+#ifdef DEBUG_COMP
+        std::cout << "Compiler visit EpsilonExpr" << std::endl;
+#endif
+        st.push(FsaAnno::epsilon(&expr));
+    }
+
     void visit(IntersectExpr &expr) override {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit IntersectExpr" << std::endl;
@@ -202,7 +209,7 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
         visit(*expr.lhs);
-        st.top().intersect(rhs, expr);
+        st.top().intersect(rhs, &expr);
     }
 
     void visit(LiteralExpr &expr) override {
@@ -217,7 +224,7 @@ struct Compiler : Visitor<Expr> {
         std::cout << "Compiler visit MaybeExpr" << std::endl;
 #endif
         visit(*expr.inner);
-        st.top().question(expr);
+        st.top().question(&expr);
     }
 
     void visit(PlusExpr &expr) override {
@@ -225,7 +232,15 @@ struct Compiler : Visitor<Expr> {
         std::cout << "Compiler visit PlusExpr" << std::endl;
 #endif
         visit(*expr.inner);
-        st.top().plus(expr);
+        st.top().plus(&expr);
+    }
+
+    void visit(RepeatExpr &expr) override {
+#ifdef DEBUG_COMP
+        std::cout << "Compiler visit RepeatExpr" << std::endl;
+#endif
+        visit(*expr.inner);
+        st.top().repeat(expr);
     }
 
     void visit(UnionExpr &expr) override {
@@ -235,7 +250,7 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.rhs);
         FsaAnno rhs = std::move(st.top());
         visit(*expr.lhs);
-        st.top().union_(rhs, expr);
+        st.top().union_(rhs, &expr);
     }
 };
 

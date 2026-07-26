@@ -18,20 +18,22 @@ struct FsaAnno {
 
     static FsaAnno bracket(BracketExpr &expr);
     static FsaAnno collapse(CollapseExpr &expr);
-    static FsaAnno dot(DotExpr &expr);
+    static FsaAnno dot(DotExpr *expr);
+    static FsaAnno epsilon(EpsilonExpr *expr);
     static FsaAnno literal(LiteralExpr &expr);
 
     void add_assoc(Expr &expr);
-    void concat(FsaAnno &rhs, ConcatExpr &expr);
+    void concat(FsaAnno &rhs, ConcatExpr *expr);
     void determinize();
-    void difference(FsaAnno &rhs, DifferenceExpr &expr);
+    void difference(FsaAnno &rhs, DifferenceExpr *expr);
     void embed(EmbedExpr &expr);
-    void intersect(FsaAnno &rhs, IntersectExpr &expr);
+    void intersect(FsaAnno &rhs, IntersectExpr *expr);
     void minimize();
-    void plus(PlusExpr &expr);
-    void question(MaybeExpr &expr);
-    void star(ClosureExpr &expr);
+    void plus(PlusExpr *expr);
+    void question(MaybeExpr *expr);
+    void repeat(RepeatExpr &expr);
+    void star(ClosureExpr *expr);
     void substring_grammar();
-    void union_(FsaAnno &rhs, UnionExpr &expr);
+    void union_(FsaAnno &rhs, UnionExpr *expr);
 };
 
