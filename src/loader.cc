@@ -367,7 +367,7 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
         return cycle;
     };
     for (auto &d : depended_by) {
-        if (dfs(d.first)) {
+        if (!vis[d.first] && dfs(d.first)) {
             n_errors++;
         }
     }

@@ -627,6 +627,11 @@ void generate_graphviz(Module *mod) {
 void generate_cxx(Module *mod) {
     fprintf(output, "// Generate by hh, %s\n", mod->filename.c_str());
     fprintf(output, "#include <vector>\n");
+    fputs(
+        "#include <algorithm>\n"
+        "#include <cstdio>\n",
+        output
+    );
     fprintf(output, "\n");
     for (Stmt *x = mod->toplevel; x; x = x->next) {
         if (auto xx = dynamic_cast<DefineStmt*>(x)) {
@@ -634,6 +639,35 @@ void generate_cxx(Module *mod) {
                 generate_cxx_export(xx);
             } else if (auto xx = dynamic_cast<CppStmt*>(x)) {
                 fprintf(output, "%s", xx->code.c_str());
+                fputs(
+                    "\n"
+                    "int main(int argc, char **argv)\n"
+                    "{\n"
+                    "   long u = 0;\n"
+                    "   long len = 0;\n"
+                    "   std::vector<long> finals;\n"
+                    "   hh_main_init(u, finals);\n"
+                    "   if (argc > 1) {\n"
+                    "       for (char *c = argv[1]; *c; c++) {\n"
+                    "           u = hh_main_transit(u, *(unsigned char*)c);\n"
+                    "           if (u < 0) {\n"
+                    "               break;\n"
+                    "           }\n"
+                    "           len++;\n"
+                    "       }\n"
+                    "   } else {\n"
+                    "       int c;\n"
+                    "       while (u >= 0 && (c = getchar()) != EOF) {\n"
+                    "           u = hh_main_transit(u, c;)\n"
+                    "           if (u < 0) {\n"
+                    "               break;\n"
+                    "           }\n"
+                    "           len++;\n"
+                    "       }\n"
+                    "   }\n"
+                    "   printf(\"len: %ld\\nfinal: %s\\n\", len, u, binary_search(finals.begin(), finals.end(), u) ? \"true\", : \"false\");\n"
+                    , output
+                );
             }
         }
     }

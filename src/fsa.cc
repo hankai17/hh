@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <set>
+#include <stack>
 #include <cstdint>
 #include <climits>
 #include <iostream>
@@ -110,18 +111,21 @@ Fsa Fsa::operator~() const {
 }
 
 void Fsa::accessible(std::function<void(long)> relate) {
-    long nid = 0;
     std::vector<long> q {start};
-    std::vector<long> id(n(), -1);
-    id[start] = nid++;
+    std::vector<long> id(n(), 0);
+    id[start] = 1;
     REP (i, q.size()) {
         long u = q[i];
         for (auto &e : adj[u]) {
-            if (id[e.second] < 0) {
-                id[e.second] = nid++;
+            if (!id[e.second]) {
+                id[e.second] = 1;
                 q.push_back(e.second);
             }
         }
+    }
+    long j = 0;
+    REP (i, n()) {
+        id[i] = id[i] ? j++ : -1;
     }
     auto it = finals.begin();
     auto it2 = it;
@@ -153,7 +157,7 @@ void Fsa::accessible(std::function<void(long)> relate) {
         }
     }
     finals.erase(it2, finals.end());
-    adj.resize(nid);
+    adj.resize(j);
 }
 
 void Fsa::co_accessible(std::function<void(long)> relate) {
@@ -307,19 +311,29 @@ Fsa Fsa::difference(const Fsa &rhs, std::function<void (long)> relate) const {
     return r;
 }
 
-Fsa Fsa::determinize(std::function<void (const std::vector<long>&)> relate) const {
-    Fsa r;                                                          // 新DFA
-    std::unordered_map<std::vector<long>, long> m;
-    std::vector<std::vector<long>> q{{start}};
-    std::vector<std::vector<std::pair<long, long>>::const_iterator> its(n());
-    std::vector<long> vs;
-    epsilon_closure(q[0]);                                          // in-out q[0]存储 沿着空边递归寻找可达状态
-    m[q[0]] = 0;                                                    // 设置状态为 0
+Fsa Fsa::determinize(std::function<void (long, const std::vector<long>&)> relate) const {
+    Fsa r;
     r.start = 0;
-    REP (i, q.size()) {
-        relate(q[i]);
+    std::unordered_map<std::vector<long>, long> m;
+    std::vector<std::vector<std::pair<long, long>>::const_iterator> its(n());
+    std::vector<long> vs {start};
+    epsilon_closure(vs);                                          // in-out q[0]存储 沿着空边递归寻找可达状态
+    m[vs] = 0;                                                    // 设置状态为 0
+    std::stack<std::vector<long>> st;
+    st.push(std::move(vs));
+    while (st.size()) {
+        std::vector<long> x = std::move(st.top());
+        st.pop();
+        long id = m[x];
+        if (id + 1 > r.adj.size()) {
+            r.adj.resize(id + 1);
+        }
+        relate(id, x);
+        if (1 || id % 100 == 0) {
+            printf("%ld %ld", id, x.size());
+        }
         bool final = false;
-        for (long u : q[i]) {
+        for (long u : x) {
             if (is_final(u)) {
                 final = true;
             }
@@ -329,12 +343,11 @@ Fsa Fsa::determinize(std::function<void (const std::vector<long>&)> relate) cons
             }
         }
         if (final) {
-            r.finals.push_back(i);
+            r.finals.push_back(id);
         }
-        r.adj.emplace_back();
         for (;;) {
             long c = LONG_MAX;
-            for (long u : q[i]) {
+            for (long u : x) {
                 if (its[u] != adj[u].end()) {
                     c = std::min(c, its[u]->first);
                 }
@@ -343,7 +356,7 @@ Fsa Fsa::determinize(std::function<void (const std::vector<long>&)> relate) cons
                 break;
             }
             vs.clear();
-            for (long u : q[i]) {
+            for (long u : x) {
                 for (; its[u] != adj[u].end() && its[u]->first == c; ++its[u]) {
                     vs.push_back(its[u]->second);
                 }
@@ -364,12 +377,13 @@ Fsa Fsa::determinize(std::function<void (const std::vector<long>&)> relate) cons
             auto mit = m.find(vs);
             if (mit == m.end()) {
                 mit = m.emplace(vs, m.size()).first;
-                q.push_back(vs);
+                st.push(vs);
             }
-            r.adj[i].emplace_back(c, mit->second);
+            r.adj[id].emplace_back(c, mit->second);
             //std::cout << "mit->second: " << mit->second << std::endl;
         }
     }
+    std::sort(ALL(r.finals));
 
     /*
     for (auto &e : m) {
