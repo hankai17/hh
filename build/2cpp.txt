@@ -1,0 +1,18 @@
+#c++ test0 {
+//c++ test0 {
+/*c++ test0 {*/
+c++ {
+    int a = 1;
+    char c = 'a';
+    if (1) {
+        printf("hello world\n");
+    }
+    return "abc";
+}
+
+#import "3.txt"
+import "3.txt" as Tt
+a = !Tt::a3
+b = Tt::b3
+
+

@@ -93,8 +93,7 @@ int yylex(YYSTYPE *yylval, YYLTYPE *loc, Stmt *&res, long &errors,
         FAIL(*loc, yylval->errmsg ? yylval->errmsg : "Invalid character");
         free(yylval->errmsg);
     }
-    
-/*
+   /* 
     if (token == YYEMPTY) {
         locfile.locate(*loc, "EMPTY");
     }
@@ -107,8 +106,35 @@ int yylex(YYSTYPE *yylval, YYLTYPE *loc, Stmt *&res, long &errors,
     if (token == YYUNDEF) {
         locfile.locate(*loc, "YYUNDEF");
     }
+    if (token == ACTION) {
+        locfile.locate(*loc, "ACTION: \n");
+    }
+    if (token == AS) {
+        locfile.locate(*loc, "AS \n");
+    }
+    if (token == CPP) {
+        locfile.locate(*loc, "CPP \n");
+    }
+    if (token == DOTDOT) {
+        locfile.locate(*loc, "DOTDOT \n");
+    }
+    if (token == EPSILON) {
+        locfile.locate(*loc, "EPSILON \n");
+    }
+    if (token == EXPORT) {
+        locfile.locate(*loc, "EXPORT \n");
+    }
+    if (token == IMPORT) {
+        locfile.locate(*loc, "IMPORT \n");
+    }
+    if (token == INTACT) {
+        locfile.locate(*loc, "INTACT \n");
+    }
     if (token == INVALID_CHARACTER) {
         locfile.locate(*loc, "INVALID_CHARACTER");
+    }
+    if (token == SEMISEMI) {
+        locfile.locate(*loc, "SEMISEMI \n");
     }
     if (token == CHAR) {
         locfile.locate(*loc, "CHAR: %c\n", yylval->integer);
@@ -117,15 +143,15 @@ int yylex(YYSTYPE *yylval, YYLTYPE *loc, Stmt *&res, long &errors,
         locfile.locate(*loc, "INTEGER: %d\n", yylval->integer);
     }
     if (token == IDENT) {
-        locfile.locate(*loc, "IDENT: %s\n", yylval->string);
+        locfile.locate(*loc, "IDENT: %s\n", yylval->str->c_str());
     }
     if (token == STRING_LITERAL) {
-        locfile.locate(*loc, "STRING_LITERAL: %s\n", yylval->string);
+        locfile.locate(*loc, "STRING_LITERAL: %s\n", yylval->str->c_str());
     }
     if (token == BRACED_CODE) {
-        locfile.locate(*loc, "BRACED_CODE: %s\n", yylval->string);
+        locfile.locate(*loc, "BRACED_CODE: %s\n", yylval->str->c_str());
     }
-*/
+    */
     return token;
 }
 

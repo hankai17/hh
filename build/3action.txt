@@ -1,0 +1,13 @@
+action print_digit {
+    printf("test hello\n");
+}
+
+digit = [0-9] > print_digit
+
+#digit1 = [0-9] > { printf("digit\n"); }
+#
+#word = [a-zA-Z]+ >{ printf("enter hello\n"); } // 进入时
+#    @  { printf("finish hello\n"); }     // 完成匹配时
+#    %  { printf("leave hello\n"); }      // 离开时
+#    $  { printf("transit\n"); }         // 每次转移时
+

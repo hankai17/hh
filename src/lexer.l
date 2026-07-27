@@ -95,7 +95,7 @@ IS  (u|U|l|L)*
 
 [-~!&*=+,.?|{}:] { return yytext[0]; }
 
-"action" yy_push_state(EXPECT_ACTION, yyscanner); return ACTION;
+"action" yy_push_state(EXPECT_CODE, yyscanner); return ACTION;
 "as" return AS;
 "c++" yy_push_state(EXPECT_CODE, yyscanner); return CPP;
 "epsilon" return EPSILON;
@@ -211,7 +211,6 @@ IS  (u|U|l|L)*
     [ \t\n]+ {}
     <<EOF>> yy_pop_state(yyscanner);
     . yylval->errmsg = strdup("Invalid character"); return INVALID_CHARACTER;
-    
 }
 
 <IN_CODE>{

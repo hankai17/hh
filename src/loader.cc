@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <functional>
 
-#define DEBUG_ON 0
+//#define DEBUG_ON 0
 
 static std::map<std::pair<dev_t, ino_t>, Module> inode2module;
 static std::unordered_map<DefineStmt*, std::vector<DefineStmt*>> depended_by;
@@ -76,7 +76,7 @@ struct ModuleImportDef : PreorderStmtVisitor {
 #ifdef DEBUG_ON
         std::cout << "visit ModuleImportDef:PreorderStmtVisitor DefineStmt\n" << std::endl;
 #endif
-        mod.defined.emplace(stmt.lhs, &stmt);                           // 2.1.1 copy AST到 ModuleImportDef
+        mod.defined.emplace(stmt.lhs, &stmt);                           // 2.1.1
         stmt.module = &mod;
         depended_by[&stmt];
     }
@@ -139,8 +139,8 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
                 n_errors++;
                 mod.locfile.locate(action.loc, "Unknown module '%s'\n", action.qualified.c_str());
             } else {
-                auto it = mod.qualified_import[action.qualified]->defined.find(action.ident);
-                if (it == mod.qualified_import[action.qualified]->defined.end()) {
+                auto it = mod.qualified_import[action.qualified]->defined_action.find(action.ident);
+                if (it == mod.qualified_import[action.qualified]->defined_action.end()) {
                     n_errors++;
                     mod.locfile.locate(action.loc, "'%s::%s': Undefined \n", action.qualified.c_str(), action.ident.c_str());
                 } else {
@@ -148,11 +148,11 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
                 }
             }
         } else {
-            auto it = mod.defined.find(action.ident);
-            auto module = it != mod.defined.end() ? &mod : NULL;
+            auto it = mod.defined_action.find(action.ident);
+            auto module = it != mod.defined_action.end() ? &mod : NULL;
             for (auto &import : mod.unqualified_import) {
-                auto it2 = import->defined.find(action.ident);
-                if (it2 != import->defined.end()) {
+                auto it2 = import->defined_action.find(action.ident);
+                if (it2 != import->defined_action.end()) {
                     if (module) {
                         n_errors++;
                         mod.locfile.locate(action.loc, "'%s' redefined in unqualified import %s\n",
@@ -220,7 +220,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
 #ifdef DEBUG_ON
         std::cout << "visit ModuleUse:PreorderActionExprStmtVisitor EmbedExpr\n" << std::endl;
 #endif
-        if (expr.qualified.size()) {                                   // 限定符场景
+        if (expr.qualified.size()) {                                    // 限定符场景
             if (!mod.qualified_import.count(expr.qualified)) {
                 n_errors++;
                 mod.locfile.locate(expr.loc, "Unknown module '%s'\n", expr.qualified.c_str());
@@ -234,8 +234,8 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
                     expr.define_stmt = it->second;
                 }
             }
-        } else {                                                // 无限定符场景 或 一般场景
-            auto it = mod.defined.find(expr.ident);             // 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
+        } else {                                                        // 无限定符场景 或 一般场景
+            auto it = mod.defined.find(expr.ident);                     // 一般场景: 检查 全局是否 已经存储(ModuleImportDef:PreorderStmtVisitor::visit(DefineStmt &))了这个ident
             bool found = it != mod.defined.end();
             for (auto &import : mod.unqualified_import) {
                 auto it2 = import->defined.find(expr.ident);
@@ -254,7 +254,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
                 n_errors++;
                 mod.locfile.locate(expr.loc, "'%s' Undefined\n", expr.ident.c_str());
             } else {
-                depended_by[it->second].push_back(stmt); // 被依赖
+                depended_by[it->second].push_back(stmt);                // it->second(源stmt) 被stmt(当前)依赖
                 expr.define_stmt = it->second;
             }
         }
@@ -379,15 +379,15 @@ long load(const std::string &filename) {
     long n_errors = 0;
 
     Module *mod = load_module(n_errors, filename);
-    if (!mod) {                 // 1 加载首文件 构建基本的(第一个)AST
+    if (!mod) {                                             // hankai1 加载首文件 构建基本的(第一个)AST
         err_exit(EX_OSFILE, "fopen", filename.c_str());
         return n_errors;
     }
 
-    printf("\nProcessing import & def\n");
+    printf("\n====== Processing import & def\n");
     for (;;) {
         bool done = true;
-        for (auto &it : inode2module) {                     // 2 ModuleImportDef(能接所有语句) 根据基本的AST 构建完整的AST以及依赖关系
+        for (auto &it : inode2module) {                     // hankai2 ModuleImportDef(能接所有语句) 根据基本的AST 构建完整的AST以及依赖关系
             if (!it.second.processed) {
                 done = false;
                 Module &mod = it.second;
@@ -406,10 +406,10 @@ long load(const std::string &filename) {
         return n_errors; 
     }
 
-    printf("\nProcessing use\n");
+    printf("\n====== Processing use\n");
     for (auto &it : inode2module) {
         Module &mod = it.second;
-        ModuleUse p { mod, n_errors };                      // 3 检查变量以及引用 是否正确
+        ModuleUse p { mod, n_errors };                      // hankai3 检查变量以及引用 是否正确
         for (Stmt *s = mod.toplevel; s; s= s->next) {
             s->accept(p);
         }
@@ -438,13 +438,13 @@ long load(const std::string &filename) {
         }
     }
 
-    printf("\nTopological sorting\n");
+    printf("\n====== Topological sorting\n");
     std::vector<DefineStmt*> topo = topo_define_stmts(n_errors);
     if (n_errors) {
         return n_errors; 
     }
 
-    printf("\nCompiling DefineStmt\n");
+    printf("\n====== Compiling DefineStmt\n");
     for (auto stmt : topo) {
         printf("%s->%s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
         compile(stmt);
