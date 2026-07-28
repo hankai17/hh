@@ -35,11 +35,12 @@ FsaAnno FsaAnno::bracket(BracketExpr &expr) {
 }
 
 FsaAnno FsaAnno::collapse(CollapseExpr &expr) {
+    static long label = 256;
     FsaAnno r;
     r.fsa.start = 0;
     r.fsa.finals = {1};
     r.fsa.adj.resize(2);
-    r.fsa.adj[0].emplace_back(256, 1);
+    r.fsa.adj[0].emplace_back(label++, 1);
     r.assoc.resize(2);
     r.add_assoc(expr);
     r.deterministic = true;

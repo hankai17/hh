@@ -295,8 +295,6 @@ void compile(DefineStmt *stmt) {
     Compiler comp;
     comp.visit(*stmt->rhs);
     anno = std::move(comp.st.top());
-    anno.determinize();
-    anno.minimize();
 }
 
 void compile_actions(DefineStmt *stmt) {
@@ -401,8 +399,12 @@ void compile_actions(DefineStmt *stmt) {
                     fprintf(output, "{%s}\n", get_code(action).c_str());
                 }
             }
-            for (auto j = withins[v].begin(); j != je; ++j) {
-                if (long(j->second) & long(ExprTag::final)) {
+            for (auto i = withins[u].begin(), j = withins[v].begin(); j != je; ++j) {
+                while (i != ie && i->first < j->first) {
+                    ++i;
+                }
+                if (i != ie && i->first == j->first &&
+                        long(j->second) & long(ExprTag::final)) {
                     for (auto action : j->first->finishing) {
                         ident(output, 3);
                         fprintf(output, "{%s}\n", get_code(action).c_str());
@@ -458,7 +460,7 @@ void compile_export(DefineStmt *stmt) {                                // 展开
         assoc.insert(assoc.end(), ALL(anno.assoc));
         assoc.emplace_back();
         FOR (i, old, old + anno.fsa.n()) {
-            if (anno.fsa.has(i - old, 256)) {                               // 这个状态有引用转移
+            if (anno.fsa.has_special(i - old)) {                               // 这个状态有引用转移
                 for (auto aa : assoc[i]) {
                     if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {  // 找到 引用转移的边
                         DefineStmt *v = e->define_stmt;                     // 找到 最原始处的定义
@@ -468,7 +470,7 @@ void compile_export(DefineStmt *stmt) {                                // 展开
                     }
                 }
                 long j = adj[i].size();
-                while (j && adj[i][j - 1].first == 256) {
+                while (j && adj[i][j - 1].first >= 256) {
                     long v = adj[i][--j].second;
                     for (auto aa : assoc[v]) {
                         if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {

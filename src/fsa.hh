@@ -12,6 +12,7 @@ struct Fsa {
     long n() const { return adj.size(); }
     bool is_final(long x) const;
     bool has(long u, long a) const;
+    bool has_special(long u) const;
     void epsilon_closure(std::vector<long> &src) const;
 
     Fsa operator~() const;

@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <algorithm>
+#include <bitset>
 #include <set>
 #include <stack>
 #include <cstdint>
@@ -27,8 +28,12 @@ bool Fsa::is_final(long x) const {
 }
 
 bool Fsa::has(long u, long a) const {
-    auto it = std::lower_bound(ALL(adj[u]), std::make_pair(a, 0L));
+    auto it = std::lower_bound(ALL(adj[u]), std::make_pair(a, LONG_MIN));
     return it != adj[u].end() && it->first == a;
+}
+
+bool Fsa::has_special(long u) const {
+    return std::lower_bound(ALL(adj[u]), std::make_pair((long)256, LONG_MIN)) != adj[u].end();
 }
 
 void Fsa::epsilon_closure(std::vector<long> &src) const {   // 计算ε-闭包 // 从一组状态出发，通过任意多次 ε 转移（不消耗输入字符的转移）所能到达的所有状态集合
@@ -659,3 +664,4 @@ void Fsa::remove_dead(std::function<void(long)> relate) {
     adj.resize(j);
 }
 
+// https://oi-wiki.org/misc/fsm/
