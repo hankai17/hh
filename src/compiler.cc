@@ -19,20 +19,24 @@ static void print_assoc(const FsaAnno &anno) {
         printf("%ld: ", i);
         for (auto aa : anno.assoc[i]) {
             auto a = aa.first;
-            auto tag = aa.second;
-            const char *name = typeid(*a).name();
-            while (name && isdigit(name[0])) {
-                name++;
-            }
-            std::string t = name;
-            t = t.substr(t.size() - 4);
-            std::string st_name;
-            if (a->stmt) {
-                st_name = a->stmt->lhs;
-            }
-            printf(" %s %s%d(%ld-%ld", st_name.c_str(),
-                    t.c_str(),
-                    (int)tag,
+            //auto tag = aa.second;
+            //const char *name = typeid(*a).name();
+            //while (name && isdigit(name[0])) {
+            //    name++;
+            //}
+            //std::string t = name;
+            //t = t.substr(t.size() - 4);
+            //std::string st_name;
+            //if (a->stmt) {
+            //    st_name = a->stmt->lhs;
+            //}
+            //printf(" %s %s%d(%ld-%ld", st_name.c_str(),
+            //        t.c_str(),
+            //        (int)tag,
+            //        a->loc.start,
+            //        a->loc.end);
+            printf(" %s(%ld-%ld)",
+                    a->name().c_str(),
                     a->loc.start,
                     a->loc.end);
             if (a->entering.size()) {
@@ -71,18 +75,18 @@ static void print_fsa(const Fsa &fsa) {
         }
         */
         for (auto it = fsa.adj[i].begin(); it != fsa.adj[i].end();) {
-            long from = it->first;
-            long to = from;
+            long from = it->first.first;
+            long to = it->first.second;
             long v = it->second;
             while (++it != fsa.adj[i].end() &&
-                    it->first == to + 1 &&
+                    to == it->first.first &&
                     it->second == v) {
-                to++;
+                to = it->first.second;
             }
-            if (from == to) {
+            if (from == to - 1) {
                 printf(" (%ld,%ld)", from, v);
             } else {
-                printf(" (%ld-%ld,%ld)", from, to, v);
+                printf(" (%ld-%ld,%ld)", from, to - 1, v);
             }
         }
         puts("");
@@ -134,7 +138,8 @@ struct Compiler : Visitor<Expr> {
         }
         path.push(&expr);
 #ifdef DEBUG_COMP
-        printf("expr:(%ld-%ld), depth:%ld, stmt:%s\n",
+        printf("expr:%s(%ld-%ld), depth:%ld, stmt:%s\n",
+                expr.name().c_str(),
                 expr.loc.start,
                 expr.loc.end,
                 expr.depth,
@@ -145,6 +150,7 @@ struct Compiler : Visitor<Expr> {
     void post_expr(Expr &expr) {
         path.pop();
         expr.post = tick;
+        st.top().fsa.check();
     }
 
     void visit(Expr &expr) override {
@@ -225,7 +231,7 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit EpsilonExpr" << std::endl;
 #endif
-        st.push(FsaAnno::epsilon(&expr));
+        st.push(FsaAnno::epsilon_fsa(&expr));
     }
 
     void visit(IntersectExpr &expr) override {
@@ -295,6 +301,12 @@ void compile(DefineStmt *stmt) {
     Compiler comp;
     comp.visit(*stmt->rhs);
     anno = std::move(comp.st.top());
+    anno.determinize();
+    anno.minimize();
+    printf("size(%s::%s) = %ld\n",
+            stmt->module->filename.c_str(),
+            stmt->lhs.c_str(),
+            anno.fsa.n());
 }
 
 void compile_actions(DefineStmt *stmt) {
@@ -352,23 +364,24 @@ void compile_actions(DefineStmt *stmt) {
         fprintf(output, "case %ld:\n", u);
         ident(output, 2);
         fprintf(output, "switch (c) {\n");
+        std::unordered_map<
+            long,
+            std::pair<
+                    std::vector<std::pair<long, long>>,
+                    std::stringstream
+            >
+        > v2case;
         for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end();) {
-            long from = it->first;
-            long to = from;
+            long from = it->first.first;
+            long to = it->first.second;
             long v = it->second;
             while (++it != anno.fsa.adj[u].end() &&
-                    it->first == to + 1 &&
+                    to == it->first.first &&
                     it->second == v) {
-                to++;
+                to = it->first.second;
             }
-            ident(output, 2);
-            if (from == to) {
-                fprintf(output, "case %ld:\n", from);
-            } else {
-                fprintf(output, "case %ld ... %ld:\n", from, to);
-            }
-            ident(output, 3);
-            fprintf(output, "v = %ld;\n", v);
+            v2case[v].first.emplace_back(from, to);
+            std::stringstream &body = v2case[v].second;
             auto ie = withins[u].end();
             auto je = withins[v].end();
             for (auto i = withins[u].begin(), j = withins[v].begin(); i != ie; ++i) {
@@ -378,7 +391,7 @@ void compile_actions(DefineStmt *stmt) {
                 if (j == je || i->first != j->first) {
                     for (auto action : i->first->leaving) {
                         ident(output, 3);
-                        fprintf(output, "{%s}\n", get_code(action).c_str());
+                        body << "{" << get_code(action) << "}\n";
                     }
                 }
             }
@@ -389,14 +402,19 @@ void compile_actions(DefineStmt *stmt) {
                 if (i == ie || i->first != j->first) {
                     for (auto action : j->first->entering) {
                         ident(output, 3);
-                        fprintf(output, "{%s}\n", get_code(action).c_str());
+                        body << "{" << get_code(action) << "}\n";
                     }
                 }
             }
-            for (auto j = withins[v].begin(); j != je; ++j) {
-                for (auto action : j->first->transiting) {
-                    ident(output, 3);
-                    fprintf(output, "{%s}\n", get_code(action).c_str());
+            for (auto i = withins[u].begin(), j = withins[v].begin(); j != je; ++j) {
+                while (i != ie && i->first < j->first) {
+                    ++i;
+                }
+                if (i != ie || i->first == j->first) {
+                    for (auto action : j->first->transiting) {
+                        ident(output, 3);
+                        body << "{" << get_code(action) << "}\n";
+                    }
                 }
             }
             for (auto i = withins[u].begin(), j = withins[v].begin(); j != je; ++j) {
@@ -407,10 +425,22 @@ void compile_actions(DefineStmt *stmt) {
                         long(j->second) & long(ExprTag::final)) {
                     for (auto action : j->first->finishing) {
                         ident(output, 3);
-                        fprintf(output, "{%s}\n", get_code(action).c_str());
+                        body << "{" << get_code(action) << "}\n";
                     }
                 }
             }
+        }
+        for (auto & x : v2case) {
+            for (auto &y : x.second.first) {
+                ident(output, 2);
+                if (y.first == y.second - 1) {
+                    fprintf(output, "case %ld:\n", y.first);
+                } else {
+                    fprintf(output, "case %ld ... %ld:\n", y.first, y.second - 1);
+                }
+            }
+            ident(output, 3);
+            fprintf(output, "v = %ld;\n%s", x.first, x.second.second.str().c_str());
             ident(output, 3);
             fprintf(output, "break;\n");
         }
@@ -431,7 +461,7 @@ void compile_export(DefineStmt *stmt) {                                // 展开
     FsaAnno &anno = compiled[stmt];                                     //  注意这里只修改 anno 不会改变 stmt 语法树
 
     printf("Construct automato with all referenced CollapseExpr's DefineStmt\n");
-    std::vector<std::vector<std::pair<long, long>>> adj;
+    std::vector<std::vector<Edge>> adj;
     decltype(anno.assoc) assoc;
     std::vector<std::vector<DefineStmt*>> cllps;
     long allo = 0;
@@ -465,20 +495,26 @@ void compile_export(DefineStmt *stmt) {                                // 展开
                     if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {  // 找到 引用转移的边
                         DefineStmt *v = e->define_stmt;                     // 找到 最原始处的定义
                         allocate_collapse(v);
-                        sorted_insert(adj[i],
-                                std::make_pair(-1L, stmt2offset[v] + compiled[v].fsa.start));
+                        sorted_emplace(adj[i],
+                                epsilon,
+                                stmt2offset[v] + compiled[v].fsa.start);
                     }
                 }
                 long j = adj[i].size();
-                while (j && adj[i][j - 1].first >= 256) {
-                    long v = adj[i][--j].second;
+                while (j && 256 < adj[i][j - 1].first.second) {
+                    long v = adj[i][j-1].second;
+                    if (adj[i][j - 1].first.first < 256) {
+                        adj[i][j - 1].first.second = 256;
+                    } else {
+                        j--;
+                    }
                     for (auto aa : assoc[v]) {
                         if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
                             DefineStmt *w = e->define_stmt;
                             allocate_collapse(w);
                             for (long f : compiled[w].fsa.finals) {
                                 long g = stmt2offset[w] + f;
-                                sorted_insert(adj[g], std::make_pair(-1L, v));
+                                sorted_emplace(adj[g], epsilon, v);
                                 if (g == i) {
                                     j++;
                                 }
@@ -596,21 +632,15 @@ void generate_graphviz(Module *mod) {
                     std::unordered_map<long, std::stringstream> labels;
                     bool first = true;
                     auto it = anno.fsa.adj[u].begin();
-                    auto it2 = it;
-                    auto ite = anno.fsa.adj[u].end();
-                    for (; it != ite; it = it2) {
-                        long v = it->first;
-                        while (++it2 != ite && it->second == it2->second) {
-                            v = it2->first;
-                        }
+                    for (; it != anno.fsa.adj[u].end(); ++it) {
                         std::stringstream &lb = labels[it->second];
                         if (!lb.str().empty()) {
                             lb << ",";
                         }
-                        if (it->first == v) {
-                            lb << v;
+                        if (it->first.first == it->first.second - 1) {
+                            lb << it->first.first;
                         } else {
-                            lb << it->first << "-" << v;
+                            lb << it->first.first << "-" << it->first.second - 1;
                         }
                     }
                     for (auto &lb : labels) {

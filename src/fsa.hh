@@ -3,12 +3,17 @@
 #include <vector>
 #include <functional>
 
+typedef std::pair<long, long> Label;
+typedef std::pair<Label, long> Edge;
+const Label epsilon {-1L, 0L};
+
 struct Fsa {
     long start;
     std::vector<long> finals;
-    std::vector<std::vector<std::pair<long, long>>> adj;    // 每个元素是一个状态出边集合 eg: 状态2的出边 包含有<'b', 2> <'b', 4>
+    std::vector<std::vector<Edge>> adj;    // 每个元素是一个状态出边集合 eg: 状态2的出边 包含有<'b', 2> <'b', 4>
                                                             //                              状态3的出边 <-1, 2>, <a, 4>
 
+    bool check() const;
     long n() const { return adj.size(); }
     bool is_final(long x) const;
     bool has(long u, long a) const;

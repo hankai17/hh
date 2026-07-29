@@ -53,3 +53,19 @@ void sorted_insert(std::vector<T>& a, const T& x)
 
 void ident(FILE *f, int d);
 
+template<class T, class ...Args>
+void emplace_front(std::vector<T> &a, Args &&...args) {
+    a.emplace(a.begin(), args...);
+}
+
+template<class T, class ...Args>
+void sorted_emplace(std::vector<T> &a, Args &&...args) {
+    T x {args...};
+    a.emplace_back();
+    auto it = a.end();
+    while (a.begin() != --it && x < it[-1]) {
+        *it = it[-1];
+    }
+    *it = x;
+}
+

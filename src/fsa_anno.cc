@@ -25,7 +25,7 @@ FsaAnno FsaAnno::bracket(BracketExpr &expr) {
     r.fsa.adj.resize(2);
     REP (c, 256) {
         if (expr.charset[c]) {
-            r.fsa.adj[0].emplace_back(c, 1);
+            r.fsa.adj[0].emplace_back(std::make_pair(c, c + 1), 1);
         }
     }
     r.assoc.resize(2);
@@ -40,7 +40,8 @@ FsaAnno FsaAnno::collapse(CollapseExpr &expr) {
     r.fsa.start = 0;
     r.fsa.finals = {1};
     r.fsa.adj.resize(2);
-    r.fsa.adj[0].emplace_back(label++, 1);
+    r.fsa.adj[0].emplace_back(std::make_pair(label, label + 1), 1);
+    label++;
     r.assoc.resize(2);
     r.add_assoc(expr);
     r.deterministic = true;
@@ -52,9 +53,7 @@ FsaAnno FsaAnno::dot(DotExpr *expr) {
     r.fsa.start = 0;
     r.fsa.finals = {1};
     r.fsa.adj.resize(2);
-    REP (c, 256) {
-        r.fsa.adj[0].emplace_back(c, 1);
-    }
+    r.fsa.adj[0].emplace_back(std::make_pair(0L, 256), 1);
     r.assoc.resize(2);
     if (expr) {
         r.add_assoc(*expr);
@@ -62,7 +61,7 @@ FsaAnno FsaAnno::dot(DotExpr *expr) {
     return r;
 }
 
-FsaAnno FsaAnno::epsilon(EpsilonExpr *expr) {
+FsaAnno FsaAnno::epsilon_fsa(EpsilonExpr *expr) {
     FsaAnno r;
     r.fsa.start = 0;
     r.fsa.finals.push_back(0);
@@ -79,12 +78,16 @@ FsaAnno FsaAnno::epsilon(EpsilonExpr *expr) {
 FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     FsaAnno r;
     r.fsa.start = 0;
-    r.fsa.finals.assign(1, expr.literal.size());
-    r.fsa.adj.resize(expr.literal.size() + 1);
+    long len = 0;
+
+    len = expr.literal.size();
+    r.fsa.adj.resize(len + 1);
     REP (i, expr.literal.size()) {
-        r.fsa.adj[i].emplace_back((unsigned char)expr.literal[i], i + 1);
+        long c = (u8)expr.literal[i];
+        r.fsa.adj[i].emplace_back(std::make_pair(c, c + 1), i + 1);
     }
-    r.assoc.resize(expr.literal.size() + 1);
+    r.fsa.finals.push_back(len);
+    r.assoc.resize(len + 1);
     r.add_assoc(expr);
     r.deterministic = true;
     return r;
@@ -92,6 +95,7 @@ FsaAnno FsaAnno::literal(LiteralExpr &expr) {
 
 FsaAnno FsaAnno::unicode_range(UnicodeRangeExpr &expr) {
     FsaAnno r;
+    /*
     long n = 0;
     struct Trie {
         long id = 1;
@@ -148,6 +152,7 @@ FsaAnno FsaAnno::unicode_range(UnicodeRangeExpr &expr) {
     std::sort(ALL(r.fsa.finals));
     r.assoc.resize(n);
     r.add_assoc(expr);
+    */
     return r;
 }
 
@@ -220,15 +225,19 @@ void FsaAnno::add_assoc(Expr &expr) {
 }
 
 void FsaAnno::complement(ComplementExpr *expr) {
+    if (!deterministic) {
+        fsa = fsa.determinize([&](long, const std::vector<long>&) {});
+    }
     fsa = ~fsa;
     assoc.assign(fsa.n(), {});
+    deterministic = true;
 }
 
 void FsaAnno::concat(FsaAnno& rhs, ConcatExpr *expr) {
     long ln = fsa.n();
     long rn = rhs.fsa.n();
     for (long f : fsa.finals) {
-        fsa.adj[f].emplace(fsa.adj[f].begin(), -1, ln + rhs.fsa.start);
+        emplace_front(fsa.adj[f], epsilon, ln + rhs.fsa.start);
     }
     for (auto& es: rhs.fsa.adj) {
         for (auto& e: es) {
@@ -403,8 +412,8 @@ void FsaAnno::union_(FsaAnno &rhs, UnionExpr *expr) {
         fsa.adj.emplace_back(std::move(es));
     }
     fsa.adj.emplace_back();
-    fsa.adj[src].emplace_back(-1, old_lsrc);
-    fsa.adj[src].emplace_back(-1, ln + rhs.fsa.start);
+    fsa.adj[src].emplace_back(epsilon, old_lsrc);
+    fsa.adj[src].emplace_back(epsilon, ln + rhs.fsa.start);
     assoc.resize(fsa.n());
     REP (i, rhs.fsa.n()) {
         assoc[ln + i] = std::move(rhs.assoc[i]);
@@ -417,7 +426,7 @@ void FsaAnno::union_(FsaAnno &rhs, UnionExpr *expr) {
 
 void FsaAnno::plus(PlusExpr *expr) {
     for (long f: fsa.finals) {
-        sorted_insert(fsa.adj[f], std::make_pair(-1L, fsa.start));
+        emplace_front(fsa.adj[f], epsilon, fsa.start);
     }
     if (expr) {
         add_assoc(*expr);
@@ -433,8 +442,8 @@ void FsaAnno::question(MaybeExpr *expr) {
     fsa.start = src;
     fsa.adj.emplace_back();
     fsa.adj.emplace_back();
-    fsa.adj[src].emplace_back(-1, old_src);
-    fsa.adj[src].emplace_back(-1, sink);
+    fsa.adj[src].emplace_back(epsilon, old_src);
+    fsa.adj[src].emplace_back(epsilon, sink);
     fsa.finals.push_back(sink);
     assoc.resize(fsa.n());
     if (expr) {
@@ -444,7 +453,7 @@ void FsaAnno::question(MaybeExpr *expr) {
 }
 
 void FsaAnno::repeat(RepeatExpr &expr) {
-    FsaAnno r = epsilon(NULL);
+    FsaAnno r = epsilon_fsa(NULL);
     REP (i, expr.low) {
         FsaAnno t = *this;
         r.concat(t, NULL);
@@ -453,7 +462,7 @@ void FsaAnno::repeat(RepeatExpr &expr) {
         star(NULL);
         r.concat(*this, NULL);
     } else if (expr.low < expr.high) {
-        FsaAnno rhs = epsilon(NULL);
+        FsaAnno rhs = epsilon_fsa(NULL);
         FsaAnno x = *this;
         ROF (i, 0, expr.high - expr.low) {
             FsaAnno t = x;
@@ -478,11 +487,11 @@ void FsaAnno::star(ClosureExpr *expr) {
     fsa.start = src;
     fsa.adj.emplace_back();
     fsa.adj.emplace_back();
-    fsa.adj[src].emplace_back(-1, old_src);
-    fsa.adj[src].emplace_back(-1, sink);
+    fsa.adj[src].emplace_back(epsilon, old_src);
+    fsa.adj[src].emplace_back(epsilon, sink);
     for (long f: fsa.finals) {
-        sorted_insert(fsa.adj[f], std::make_pair(-1L, old_src));
-        sorted_insert(fsa.adj[f], std::make_pair(-1L, sink));
+        sorted_emplace(fsa.adj[f], epsilon, old_src);
+        sorted_emplace(fsa.adj[f], epsilon, sink);
     }
     fsa.finals.assign(1, sink);
     assoc.resize(fsa.n());
@@ -513,10 +522,10 @@ void FsaAnno::substring_grammar() {
             }
         }
         if (ok || i == old_src) {
-            fsa.adj[src].emplace_back(-1, i);
+            fsa.adj[src].emplace_back(epsilon, i);
         }
         if (ok || fsa.is_final(i)) {
-            sorted_insert(fsa.adj[i], std::make_pair(-1L, sink));
+            emplace_front(fsa.adj[i], epsilon, sink);
         }
     }
     fsa.finals.assign(1, sink);

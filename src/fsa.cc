@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <climits>
 #include <iostream>
+#include <cassert>
 
 template <typename T>
 struct std::hash<std::vector<T>> {
@@ -23,17 +24,30 @@ struct std::hash<std::vector<T>> {
     };
 };
 
+bool Fsa::check() const {
+    return true;
+    REP (i, n()) {
+        FOR (j, 1, adj[i].size()) {
+            assert(adj[i][j - 1].first.second == 0 &&
+                    adj[i][j].first.second == 0 ||
+                    adj[i][j - 1].first.second <= adj[i][j].first.first);
+        }
+    }
+}
+
 bool Fsa::is_final(long x) const {
     return std::binary_search(ALL(finals), x);
 }
 
 bool Fsa::has(long u, long a) const {
-    auto it = std::lower_bound(ALL(adj[u]), std::make_pair(a, LONG_MIN));
-    return it != adj[u].end() && it->first == a;
+    auto it = std::upper_bound(ALL(adj[u]),
+            std::make_pair(std::make_pair(a, LONG_MAX), LONG_MAX));
+    return it != adj[u].begin() && a < (--it)->first.second;
 }
 
 bool Fsa::has_special(long u) const {
-    return std::lower_bound(ALL(adj[u]), std::make_pair((long)256, LONG_MIN)) != adj[u].end();
+    return std::lower_bound(ALL(adj[u]),
+            std::make_pair(std::make_pair((long)256, LONG_MIN), LONG_MIN)) != adj[u].end();
 }
 
 void Fsa::epsilon_closure(std::vector<long> &src) const {   // 计算ε-闭包 // 从一组状态出发，通过任意多次 ε 转移（不消耗输入字符的转移）所能到达的所有状态集合
@@ -63,7 +77,7 @@ void Fsa::epsilon_closure(std::vector<long> &src) const {   // 计算ε-闭包 /
     REP (i, src.size()) {
         long u = src[i];
         for (auto &e : adj[u]) {
-            if (-1 < e.first) {
+            if (-1 < e.first.first) {
                 break;
             }
             if (!vis[e.second]) {
@@ -87,20 +101,18 @@ Fsa Fsa::operator~() const {
     REP (i, accept) {
         long j = 0;
         for (auto &e : adj[i]) {
-            for (; j < e.first; j++) {
-                r.adj[i].emplace_back(j, accept);
+            if (j < e.first.first) {
+                r.adj[i].emplace_back(std::make_pair(j, e.first.first), accept);
             }
             r.adj[i].emplace_back(e.first, e.second);
-            j = e.first + 1;
+            j = e.first.second;
         }
-        for (; j < 256; j++) {
-            r.adj[i].emplace_back(j, accept);
+        if (j < 256) {
+            r.adj[i].emplace_back(std::make_pair(j, 256), accept);
         }
     }
-    r.adj.emplace_back();
-    REP (i, 256) {
-        r.adj[accept].emplace_back(i, accept);
-    }
+    //r.adj.emplace_back();
+    r.adj[accept].emplace_back(std::make_pair(0, 256), accept);
     std::vector<long> new_finals;
     auto j = finals.begin();
     REP (i, accept + 1) {
@@ -166,10 +178,10 @@ void Fsa::accessible(std::function<void(long)> relate) {
 }
 
 void Fsa::co_accessible(std::function<void(long)> relate) {
-    std::vector<std::vector<std::pair<long, long>>> radj(n());
+    std::vector<std::vector<long>> radj(n());
     REP (i, n()) {
         for (auto &e : adj[i]) {
-            radj[e.second].emplace_back(e.first, i);
+            radj[e.second].push_back(i);
         }
     }
     REP (i, n()) {
@@ -182,10 +194,10 @@ void Fsa::co_accessible(std::function<void(long)> relate) {
     }
     REP (i, q.size()) {
         long u = q[i];
-        for (auto &e : adj[u]) {
-            if (!id[e.second]) {
-                id[e.second] = 1;
-                q.push_back(e.second);
+        for (auto &v : radj[u]) {
+            if (!id[v]) {
+                id[v] = 1;
+                q.push_back(v);
             }
         }
     }
@@ -253,9 +265,9 @@ Fsa Fsa::intersect(const Fsa &rhs, std::function<void (long, long)> relate) cons
         auto it1 = rhs.adj[u1].begin();
         
         while (it0 != adj[u0].end() && it1 != rhs.adj[u1].end()) {
-            if (it0->first < it1->first) {
+            if (it0->first.second <= it1->first.first) {
                 it0++;
-            } else if (it0->first > it1->first) {
+            } else if (it1->first.second <= it0->first.first) {
                 it1++;
             } else {
                 long t = rhs.n() * it0->second + it1->second;
@@ -264,9 +276,19 @@ Fsa Fsa::intersect(const Fsa &rhs, std::function<void (long, long)> relate) cons
                     mit = m.emplace(t, m.size()).first;
                     q.emplace_back(it0->second, it1->second);
                 }
-                r.adj[i].emplace_back(it0->first, mit->second);
-                it0++;
-                it1++;
+                r.adj[i].emplace_back(
+                        std::make_pair(
+                            std::max(it0->first.first, it1->first.first),
+                            std::min(it0->first.second, it1->first.second)
+                        ), mit->second);
+                if (it0->first.second < it1->first.second) {
+                    ++it0;
+                } else if (it0->first.second > it1->first.second) {
+                    ++it1;
+                } else {
+                    ++it0;
+                    ++it1;
+                }
             }
         }
     }
@@ -278,6 +300,8 @@ Fsa Fsa::difference(const Fsa &rhs, std::function<void (long)> relate) const {
     std::vector<std::pair<long, long>> q;
     long u0;
     long u1;
+    long v0;
+    long v1;
     std::unordered_map<long, long> m;
     q.emplace_back(start, rhs.start);
     m[(rhs.n() + 1) * start + rhs.start] = 0;
@@ -298,19 +322,30 @@ Fsa Fsa::difference(const Fsa &rhs, std::function<void (long)> relate) const {
             it1 = rhs.adj[u1].begin();
             it1e = rhs.adj[u1].end();
         }
-        for (; it0 != adj[u0].end(); ++it0) {
-            while (it1 != it1e && it1->first < it0->first) {
+        long last = LONG_MIN;
+        while (it0 != adj[u0].end()) {
+            long from = std::max(last, it0->first.first);
+            long to = it0->first.second;
+            while (it1 != it1e && it1->first.second <= from) {
                 ++it1;
             }
+            if (it1 != it1e) {
+                to = std::min(to, from < it1->first.first ?
+                            it1->first.first : it1->first.second);
+            }
+            last = to;
             long v1 = it1 != it1e &&
-                    it1->first == it0->first ?  it1->second : rhs.n();
+                    it1->first.first <= from ?  it1->second : rhs.n();
             long t = (rhs.n() + 1) * it0->second + v1;
             auto mit = m.find(t);
             if (mit == m.end()) {
                 mit = m.emplace(t, m.size()).first;
                 q.emplace_back(it0->second, v1);
             }
-            r.adj[i].emplace_back(it0->first, mit->second);
+            r.adj[i].emplace_back(std::make_pair(from, to), mit->second);
+            if (to == it0->first.second) {
+                ++it0;
+            }
         }
     }
     return r;
@@ -320,8 +355,9 @@ Fsa Fsa::determinize(std::function<void (long, const std::vector<long>&)> relate
     Fsa r;
     r.start = 0;
     std::unordered_map<std::vector<long>, long> m;
-    std::vector<std::vector<std::pair<long, long>>::const_iterator> its(n());
+    std::vector<std::vector<Edge>::const_iterator> its(n());
     std::vector<long> vs {start};
+    std::vector<std::pair<long, long>> events;
     epsilon_closure(vs);                                          // in-out q[0]存储 沿着空边递归寻找可达状态
     m[vs] = 0;                                                    // 设置状态为 0
     std::stack<std::vector<long>> st;
@@ -334,62 +370,60 @@ Fsa Fsa::determinize(std::function<void (long, const std::vector<long>&)> relate
             r.adj.resize(id + 1);
         }
         relate(id, x);
-        if (1 || id % 100 == 0) {
-            printf("%ld %ld", id, x.size());
-        }
         bool final = false;
+        events.clear();
         for (long u : x) {
             if (is_final(u)) {
                 final = true;
             }
-            its[u] = adj[u].begin();
-            while (its[u] != adj[u].end() && its[u]->first < 0) {
-                ++its[u];
+            for (auto &e : adj[u]) {
+                events.emplace_back(e.first.first, e.second);
+                events.emplace_back(e.first.second, ~ e.second);
             }
         }
         if (final) {
             r.finals.push_back(id);
         }
-        for (;;) {
-            long c = LONG_MAX;
-            for (long u : x) {
-                if (its[u] != adj[u].end()) {
-                    c = std::min(c, its[u]->first);
+        long last = 0;
+        std::multiset<long> live;
+        std::sort(ALL(events));
+        for (auto &ev : events) {
+            if (last < ev.first) {
+                if (live.size()) {
+                    vs.assign(ALL(live));
+                    vs.erase(std::unique(ALL(vs)), vs.end());
+                    epsilon_closure(vs);
+                    /*
+                    std::cout << "vs: ";
+                    for (auto &v : vs) {
+                        std::cout << v << ", ";
+                    }
+                    std::cout << std::endl;
+                    */
+                    auto mit = m.find(vs);
+                    if (mit == m.end()) {
+                        mit = m.emplace(vs, m.size()).first;
+                        st.push(vs);
+                    }
+                    if (r.adj[id].size() &&
+                            r.adj[id].back().first.second == last &&
+                            r.adj[id].back().second == mit->second) {
+                        r.adj[id].back().first.second = ev.first;
+                    } else {
+                        r.adj[id].emplace_back(std::make_pair(last, ev.first), mit->second);
+                    }
+                    //std::cout << "mit->second: " << mit->second << std::endl;
                 }
+                last = ev.first;
             }
-            if (c == LONG_MAX) {
-                break;
+            if (ev.second >= 0) {
+                live.insert(ev.second);
+            } else {
+                live.erase(live.find(~ ev.second));
             }
-            vs.clear();
-            for (long u : x) {
-                for (; its[u] != adj[u].end() && its[u]->first == c; ++its[u]) {
-                    vs.push_back(its[u]->second);
-                }
-            }
-            std::sort(ALL(vs));
-
-            vs.erase(std::unique(ALL(vs)), vs.end());
-            epsilon_closure(vs);
-
-            /*
-            std::cout << "vs: ";
-            for (auto &v : vs) {
-                std::cout << v << ", ";
-            }
-            std::cout << std::endl;
-            */
-
-            auto mit = m.find(vs);
-            if (mit == m.end()) {
-                mit = m.emplace(vs, m.size()).first;
-                st.push(vs);
-            }
-            r.adj[id].emplace_back(c, mit->second);
-            //std::cout << "mit->second: " << mit->second << std::endl;
         }
     }
     std::sort(ALL(r.finals));
-
     /*
     for (auto &e : m) {
         std::cout << "status: " << e.second << ", contains: ";
@@ -399,15 +433,25 @@ Fsa Fsa::determinize(std::function<void (long, const std::vector<long>&)> relate
         std::cout << std::endl;
     }
     */
-    
     return r;
 }
 
 Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
+    std::vector<long> scale;
+    REP (i, n()) {
+        for (auto &e : adj[i]) {
+            scale.push_back(e.first.first);
+        }
+    }
+    std::sort(ALL(scale));
     std::vector<std::vector<std::pair<long, long>>> radj(n());
     REP (i, n()) {
         for (auto &e : adj[i]) {
-            radj[e.second].emplace_back(e.first, i);    // 2态 : <-1, 5态> <'a', 4态>  既到2态 所有的 需要输入字符以及依赖的状态
+            long from = std::lower_bound(ALL(scale), e.first.first) - scale.begin();
+            long to = std::lower_bound(ALL(scale), e.first.second) - scale.begin();
+            FOR (j, from, to) {
+                radj[e.second].emplace_back(j, i);    // 2态 : <-1, 5态> <'a', 4态>  既到2态 所有的 需要输入字符以及依赖的状态
+            }
         }
     }
     REP (i, n()) {
@@ -462,13 +506,27 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
     }
 
     std::set<std::pair<long, long>> refines;
+    auto labels = [&] (long fx) {
+        std::vector<long> lb;
+        for (long x = fx;;) {
+            for (auto &e : radj[x]) {
+                lb.push_back(e.first);
+            }
+            if ((x = R[x]) == fx) {
+                break;
+            }
+        }
+        std::sort(ALL(lb));
+        lb.erase(std::unique(ALL(lb)), lb.end());
+        return lb;
+    };
     if (fx >= 0) {
-        REP (a, 256 + 1) {
+        for (long a : labels(fx)) {
             refines.emplace(a, fx);
         }
     }
     if (fy >= 0) {
-        REP (a, 256 + 1) {
+        for (long a : labels(fy)) {
             refines.emplace(a, fy);
         }
     }
@@ -595,13 +653,32 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
         }
     }
     REP (i, nn) {
+        std::sort(ALL(r.adj[i]), [] (const Edge &x, const Edge &y) {
+            return x.second != y.second ? x.second < y.second : x.first < y.first;
+        });
+        auto it2 = r.adj[i].begin();
+        for (auto it = r.adj[i].begin(); it != r.adj[i].end();) {
+            long v = it->second;
+            long from = it->first.first;
+            long to = it->first.second;
+            while (++it != r.adj[i].end() && it->second == v) {
+                if (it->first.first <= to) {
+                    to = std::max(to, it->first.second);
+                } else {
+                    *it2++ = std::make_pair(std::make_pair(from, to), v);
+                    std::tie(from, to) = it->first;
+                }
+            }
+            *it2++ = std::make_pair(std::make_pair(from, to), v);
+        }
+        r.adj[i].erase(it2, r.adj[i].end());
         std::sort(ALL(r.adj[i]));
-        r.adj[i].erase(std::unique(ALL(r.adj[i])), r.adj[i].end());
     }
     return r; 
 }
 
 void Fsa::remove_dead(std::function<void(long)> relate) {
+    /*
     std::vector<std::vector<std::pair<long, long>>> radj(n());
     REP (i, n()) {
         for (auto &e : adj[i]) {
@@ -662,6 +739,7 @@ void Fsa::remove_dead(std::function<void(long)> relate) {
     }
     finals.erase(it2, finals.end());
     adj.resize(j);
+    */
 }
 
 // https://oi-wiki.org/misc/fsm/

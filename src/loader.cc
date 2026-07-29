@@ -331,6 +331,7 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
     std::vector<DefineStmt*> topo;
     std::vector<DefineStmt*> st;
     std::unordered_map<DefineStmt*, i8> vis;
+    std::unordered_map<DefineStmt*, long> cnt;
     std::function<bool(DefineStmt *)> dfs = [&] (DefineStmt *u) {
         if (vis[u] == 2) {
             return false;
@@ -353,12 +354,15 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
             fputs("\n", stderr);
             return true;
         }
+        cnt[u] = u->export_ ? 1 : 0;
         vis[u] = 1;
         st.push_back(u);
         bool cycle = false;
         for (auto v : depended_by[u]) {
             if (dfs(v)) {
                 cycle = true;
+            } else {
+                cnt[u] += cnt[v];
             }
         }
         st.pop_back();
@@ -372,6 +376,15 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
         }
     }
     std::reverse(ALL(topo));
+    printf("\n====== Embed\n");
+    for (auto stmt : topo) {
+        if (cnt[stmt] > 0) {
+            printf("count(%s::%s) = %ld\n",
+                    stmt->module->filename.c_str(),
+                    stmt->lhs.c_str(),
+                    cnt[stmt]);
+        }
+    }
     return topo;
 }
 

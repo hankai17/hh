@@ -5,6 +5,9 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <memory>
+#include <typeinfo>
+#include <cxxabi.h>
 
 //#define DEBUG_CLS 1
 
@@ -158,6 +161,16 @@ struct Expr : VisitableBase<Expr> {                 // 2 Expr 白嫖accept接口
                 finishing.empty() &&
                 leaving.empty() &&
                 transiting.empty();
+    }
+    std::string name() const {
+        int status;
+        std::unique_ptr<char, void(*)(void*)> r {
+            abi::__cxa_demangle(typeid(*this).name(), NULL, NULL, &status),
+            free
+        };
+        std::string t = r.get();
+        t = t.substr(0, t.size() - 4);
+        return t;
     }
     std::string dump_info() {
         std::ostringstream oss;
