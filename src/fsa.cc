@@ -25,7 +25,6 @@ struct std::hash<std::vector<T>> {
 };
 
 bool Fsa::check() const {
-    return true;
     REP (i, n()) {
         FOR (j, 1, adj[i].size()) {
             assert(adj[i][j - 1].first.second == 0 &&
@@ -41,32 +40,37 @@ bool Fsa::is_final(long x) const {
 
 bool Fsa::has(long u, long a) const {
     auto it = std::upper_bound(ALL(adj[u]),
-            std::make_pair(std::make_pair(a, LONG_MAX), LONG_MAX));
+            std::make_pair(
+                std::make_pair(a, LONG_MAX),
+                LONG_MAX
+            )
+    );
     return it != adj[u].begin() && a < (--it)->first.second;
 }
 
-bool Fsa::has_special(long u) const {
-    return std::lower_bound(ALL(adj[u]),
-            std::make_pair(std::make_pair((long)256, LONG_MIN), LONG_MIN)) != adj[u].end();
+bool Fsa::has_call(long u) const {
+    auto it = std::upper_bound(ALL(adj[u]),
+            std::make_pair(
+                std::make_pair(call_label_base, LONG_MAX),
+                LONG_MAX
+            )
+    );
+    return (it != adj[u].end() && it->first.first < call_label) ||
+            (it != adj[u].begin() && call_label_base < (--it)->first.second);
 }
 
-void Fsa::epsilon_closure(std::vector<long> &src) const {   // 计算ε-闭包 // 从一组状态出发，通过任意多次 ε 转移（不消耗输入字符的转移）所能到达的所有状态集合
-    #if 0
-    std::unordered_set<long> visit { ALL(src) };
-    for (long i = 0; i < src.size(); i++) {
-        long u = src[i];                                    // 取出要处理的状态
-        for (auto &e : adj[u]) {                            // 遍历 要处理状态的所有ε出边 eg: vector1<ε, 状态1>, vector2<ε, 状态2>, vector3<'A', 状态3>, vector4<'B', 状态4> // 只会处理v1, v2 把状态1/2 放入src
-            if (-1 < e.first) {
-                break;
-            }
-            if (!visit.count(e.second)) {
-                visit.insert(e.second);
-                src.push_back(e.second);
-            }
-        }
-    }
-    std::sort(ALL(src));
-    #else
+bool Fsa::has_call_or_collapse(long u) const {
+    auto it = std::upper_bound(ALL(adj[u]),
+            std::make_pair(
+                std::make_pair(call_label_base, LONG_MAX),
+                LONG_MAX
+            )
+    );
+    return it != adj[u].end() ||
+            (it != adj[u].begin() && call_label_base < (--it)->first.second);
+}
+
+void Fsa::epsilon_closure(std::vector<long> &src) const {
     static std::vector<bool> vis;
     if (n() > vis.size()) {
         vis.resize(n());
@@ -90,7 +94,6 @@ void Fsa::epsilon_closure(std::vector<long> &src) const {   // 计算ε-闭包 /
         vis[i] = false;
     }
     std::sort(ALL(src));
-    #endif
 }
 
 Fsa Fsa::operator~() const {
@@ -107,12 +110,11 @@ Fsa Fsa::operator~() const {
             r.adj[i].emplace_back(e.first, e.second);
             j = e.first.second;
         }
-        if (j < 256) {
-            r.adj[i].emplace_back(std::make_pair(j, 256), accept);
+        if (j < AB) {
+            r.adj[i].emplace_back(std::make_pair(j, AB), accept);
         }
     }
-    //r.adj.emplace_back();
-    r.adj[accept].emplace_back(std::make_pair(0, 256), accept);
+    r.adj[accept].emplace_back(std::make_pair(0, AB), accept);
     std::vector<long> new_finals;
     auto j = finals.begin();
     REP (i, accept + 1) {
@@ -127,10 +129,18 @@ Fsa Fsa::operator~() const {
     return r;
 }
 
-void Fsa::accessible(std::function<void(long)> relate) {
+void Fsa::accessible(const std::vector<long> *starts, std::function<void(long)> relate) {
     std::vector<long> q {start};
     std::vector<long> id(n(), 0);
     id[start] = 1;
+    if (starts) {
+        for (long u : *starts) {
+            if (!id[u]) {
+                id[u] = 1;
+                q.push_back(u);
+            }
+        }
+    }
     REP (i, q.size()) {
         long u = q[i];
         for (auto &e : adj[u]) {
@@ -177,7 +187,7 @@ void Fsa::accessible(std::function<void(long)> relate) {
     adj.resize(j);
 }
 
-void Fsa::co_accessible(std::function<void(long)> relate) {
+void Fsa::co_accessible(const std::vector<bool> *final, std::function<void(long)> relate) {
     std::vector<std::vector<long>> radj(n());
     REP (i, n()) {
         for (auto &e : adj[i]) {
@@ -191,6 +201,14 @@ void Fsa::co_accessible(std::function<void(long)> relate) {
     std::vector<long> id(n(), 0);
     for (long f : finals) {
         id[f] = 1;
+    }
+    if (final) {
+        REP (i, n()) {
+            if ((*final)[i] && !id[i]) {
+                id[i] = 1;
+                q.push_back(i);
+            }
+        }
     }
     REP (i, q.size()) {
         long u = q[i];
@@ -252,7 +270,7 @@ Fsa Fsa::intersect(const Fsa &rhs, std::function<void (long, long)> relate) cons
     std::vector<std::pair<long, long>> q;
 
     q.emplace_back(start, rhs.start);
-    m[(rhs.n() + 1) * start + rhs.start] = 0;
+    m[rhs.n() * start + rhs.start] = 0;
     r.start = 0;
     REP (i, q.size()) {
         std::tie(u0, u1) = q[i];
@@ -297,11 +315,9 @@ Fsa Fsa::intersect(const Fsa &rhs, std::function<void (long, long)> relate) cons
 
 Fsa Fsa::difference(const Fsa &rhs, std::function<void (long)> relate) const {
     Fsa r;
-    std::vector<std::pair<long, long>> q;
     long u0;
     long u1;
-    long v0;
-    long v1;
+    std::vector<std::pair<long, long>> q;
     std::unordered_map<long, long> m;
     q.emplace_back(start, rhs.start);
     m[(rhs.n() + 1) * start + rhs.start] = 0;
@@ -351,7 +367,8 @@ Fsa Fsa::difference(const Fsa &rhs, std::function<void (long)> relate) const {
     return r;
 }
 
-Fsa Fsa::determinize(std::function<void (long, const std::vector<long>&)> relate) const {
+Fsa Fsa::determinize(const std::vector<long> *starts,
+        std::function<void (long, const std::vector<long>&)> relate) const {
     Fsa r;
     r.start = 0;
     std::unordered_map<std::vector<long>, long> m;
@@ -362,6 +379,16 @@ Fsa Fsa::determinize(std::function<void (long, const std::vector<long>&)> relate
     m[vs] = 0;                                                    // 设置状态为 0
     std::stack<std::vector<long>> st;
     st.push(std::move(vs));
+    if (starts) {
+        for (long u : *starts) {
+            vs.assign(1, u);
+            epsilon_closure(vs);
+            if (!m.count(vs)) {
+                m.emplace(vs, m.size());
+                st.push(std::move(vs));
+            }
+        }
+    }
     while (st.size()) {
         std::vector<long> x = std::move(st.top());
         st.pop();
@@ -441,9 +468,11 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
     REP (i, n()) {
         for (auto &e : adj[i]) {
             scale.push_back(e.first.first);
+            scale.push_back(e.first.second);
         }
     }
     std::sort(ALL(scale));
+    scale.erase(std::unique(ALL(scale)), scale.end());
     std::vector<std::vector<std::pair<long, long>>> radj(n());
     REP (i, n()) {
         for (auto &e : adj[i]) {
@@ -560,7 +589,9 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
                 long u = -1;
                 long fv = -1;
                 long v = -1;
-
+                long cu = 0;
+                long cv = 0;
+                std::vector<long> lb = labels(fy);
                 for (long i = fy;;) {               // ------> 2.2 遍历整个非终止态 eg: 从A态开始遍历
                     if (mark[i]) {                  // ------> 2.2.1 A态是这个a字符所依赖的状态
                         mark[i] = false;
@@ -592,7 +623,7 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
                 R[u] = fu;
                 L[fv] = v;
                 R[v] = fv;
-                REP (a, 256 + 1) {                      // ------> 4 分区: 当你分裂一个分区后，这个变化会影响其他字符的判断 所以每个字符都要重新分配分区
+                for (long a : lb) {
                     if (refines.count({a, fy})) {
                         refines.emplace(a, fu != fy ? fu : fv);
                     } else {
@@ -616,7 +647,7 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
             auto ite = upper_bound(ALL(radj[x]),
                     std::make_pair(a, n()));
             for (; it != ite; ++it) {
-                fy = B[it->second];
+                y = it->second;
                 CC[B[y]] = 0;
                 mark[y] = false;
             }
@@ -677,69 +708,5 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
     return r; 
 }
 
-void Fsa::remove_dead(std::function<void(long)> relate) {
-    /*
-    std::vector<std::vector<std::pair<long, long>>> radj(n());
-    REP (i, n()) {
-        for (auto &e : adj[i]) {
-            radj[e.second].emplace_back(e.first, i);
-        }
-    }
-    REP (i, n()) {
-        std::sort(ALL(radj[i]));
-    }
-    std::vector<long> q = finals, id(n(), 0);
-    for (long f : finals) {
-        id[f] = 1;
-    }
-    REP (i, q.size()) {
-        long u = q[i];
-        for (auto &e : radj[u]) {
-            if (!id[e.second]) {
-                id[e.second] = 1;
-                q.push_back(e.second);
-            }
-        }
-    }
-    if (!id[start]) {
-        start = 0;
-        finals.clear();
-        adj.assign(1, {});
-        return;
-    }
-    long j = 0;
-    REP (i, n()) {
-        id[i] = id[i] ? j++ : -1;
-    }
-    auto it = finals.begin();
-    auto it2 = it;
-    REP (i, n()) {
-        if (id[i] >= 0) {
-            relate(i);
-            if (start == i) {
-                start = id[i];
-            }
-            while (it != finals.end() && *it < i) {
-                ++it;
-            }
-            if (it != finals.end() && *it == i) {
-                *it2++ = id[i];
-            }
-            long k = 0;
-            for (auto &e : adj[i]) {
-                if (id[e.second] >= 0) {
-                    adj[i][k++] = { e.first, id[e.second] };
-                }
-            }
-            adj[i].resize(k);
-            if (id[i] != i) {
-                adj[id[i]] = std::move(adj[i]);
-            }
-        }
-    }
-    finals.erase(it2, finals.end());
-    adj.resize(j);
-    */
-}
-
 // https://oi-wiki.org/misc/fsm/
+

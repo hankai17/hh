@@ -40,27 +40,28 @@ struct Visitor<Action> {
 
 // Expr
 struct Expr;
-struct BracketExpr;     // 字符集表达式: 最常见的字符类，比如正则中的 [a-z0-9] 这里的括号是[]
-struct ClosureExpr;     // 闭包表达式: 对应正则中的 * 重复操作 0次或多次
-struct CollapseExpr;    // 折叠表达式: 使用 ! 操作符引用的非终结符 不记账递归
+struct BracketExpr;
+struct CallExpr;
+struct ClosureExpr;
+struct CollapseExpr;
 struct ComplementExpr;
-struct ConcatExpr;      // 连接表达式: 隐式默认存在 常见的组合方式 
-struct DifferenceExpr;  // 差集表达式: [a-z] - [aeiou] 可以匹配辅音字母
+struct ConcatExpr;
+struct DifferenceExpr;
 struct DotExpr;
-struct EmbedExpr;       // 嵌入表达式: 普通引用一个非终结符（没有 ! 或 & 修饰符） // 用于表示一个标识符（变量名、子模式名等）直接作为表达式使用
+struct EmbedExpr;
 struct EpsilonExpr;
 struct IntersectExpr;
 struct LiteralExpr;
 struct MaybeExpr;
-struct PlusExpr;        // 正闭包表达式: 对应正则中的 +
+struct PlusExpr;
 struct RepeatExpr;
-struct UnicodeRangeExpr;
-struct UnionExpr;       // 并集表达式: 或关系 |
+struct UnionExpr;
 
 template <>
 struct Visitor<Expr> {                              // 1 visitor虚基类定义expr各接口
     virtual void visit(Expr &) = 0;
     virtual void visit(BracketExpr &) = 0;
+    virtual void visit(CallExpr &) = 0;
     virtual void visit(ClosureExpr &) = 0;
     virtual void visit(CollapseExpr &) = 0;
     virtual void visit(ComplementExpr &) = 0;
@@ -74,7 +75,6 @@ struct Visitor<Expr> {                              // 1 visitor虚基类定义e
     virtual void visit(MaybeExpr &) = 0;
     virtual void visit(PlusExpr &) = 0;
     virtual void visit(RepeatExpr &) = 0;
-    virtual void visit(UnicodeRangeExpr &) = 0;
     virtual void visit(UnionExpr &) = 0;
 };
 
@@ -85,6 +85,7 @@ struct CppStmt;
 struct DefineStmt;          // 赋值语句
 struct EmptyStmt;           // 空语句
 struct ImportStmt;
+struct PreprocessDefineStmt;
 
 template <>
 struct Visitor<Stmt> {                              // 同上 visitor虚基类定义stmt各接口
@@ -94,6 +95,7 @@ struct Visitor<Stmt> {                              // 同上 visitor虚基类�
     virtual void visit(DefineStmt &) = 0;
     virtual void visit(EmptyStmt &) = 0;
     virtual void visit(ImportStmt &) = 0;
+    virtual void visit(PreprocessDefineStmt &) = 0;
 };
 
 ///////////////////////////////////////////////////// CRTP
@@ -118,7 +120,7 @@ struct InlineAction: Visitable<Action, InlineAction> {
 struct Module;
 struct RefAction : Visitable<Action, RefAction> {
     std::string qualified, ident;
-    Module *define_module;
+    ActionStmt *define_stmt;
     RefAction(std::string &qualified, std::string &ident) :
         qualified(std::move(qualified)),
         ident(std::move(ident)) {
@@ -137,23 +139,23 @@ struct Expr : VisitableBase<Expr> {                 // 2 Expr 白嫖accept接口
     long pre;
     long post;
     std::vector<Expr *> anc;
-    std::vector<Action *> entering;
-    std::vector<Action *> finishing;
-    std::vector<Action *> leaving;
-    std::vector<Action *> transiting;
+    std::vector<std::pair<Action *, long>> entering;
+    std::vector<std::pair<Action *, long>> finishing;
+    std::vector<std::pair<Action *, long>> leaving;
+    std::vector<std::pair<Action *, long>> transiting;
     DefineStmt *stmt = NULL;
     virtual ~Expr() {
         for (auto a : entering) {
-            delete a;
+            delete a.first;
         }
         for (auto a : finishing) {
-            delete a;
+            delete a.first;
         }
         for (auto a : leaving) {
-            delete a;
+            delete a.first;
         }
         for (auto a : transiting) {
-            delete a;
+            delete a.first;
         }
     }
     bool no_action() const {
@@ -183,15 +185,29 @@ struct Expr : VisitableBase<Expr> {                 // 2 Expr 白嫖accept接口
 };
 
 struct BracketExpr : Visitable<Expr, BracketExpr> { // 2.1 CRTP 但还没有实现expr中 该类的visit接口
-    std::bitset<256> charset;
-
-    BracketExpr(std::bitset<256> *in_charset) :
-        charset(*in_charset) {
-        delete in_charset;
+    DisjointIntervals intervals;
+    BracketExpr(DisjointIntervals *intervals) :
+        intervals(std::move(*intervals)) {
+        delete intervals;
 #ifdef DEBUG_CLS 
         printf("new BracketExpr\n");
 #endif
     }
+};
+
+struct CallExpr : Visitable<Expr, CallExpr> {
+    std::string qualified;
+    std::string ident;
+    DefineStmt *define_stmt = NULL;
+
+    CallExpr(std::string &qualified, std::string ident) :
+        qualified(std::move(qualified)),
+        ident(std::move(ident)) {
+#ifdef DEBUG_CLS 
+        printf("new CallExpr\n");
+#endif
+    }
+
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
@@ -273,7 +289,7 @@ struct EmbedExpr : Visitable<Expr, EmbedExpr> {
     std::string qualified;
     std::string ident;
     DefineStmt *define_stmt = NULL;
-
+    long macro_value;
     EmbedExpr(std::string &qualified, std::string &ident) :
         qualified(std::move(qualified)),
         ident(std::move(ident)) {
@@ -362,18 +378,6 @@ struct RepeatExpr : Visitable<Expr, RepeatExpr> {
     ~RepeatExpr() { delete inner; }
 };
 
-struct UnicodeRangeExpr : Visitable<Expr, UnicodeRangeExpr> {
-    long start;
-    long end;
-    UnicodeRangeExpr(long start, long end) :
-        start(start),
-        end(end) {
-#ifdef DEBUG_CLS 
-        printf("new UnicodeRangeExpr\n");
-#endif
-    }
-};
-
 struct UnionExpr : Visitable<Expr, UnionExpr> {
     Expr *lhs, *rhs;
 
@@ -427,6 +431,7 @@ struct CppStmt : Visitable<Stmt, CppStmt> {
 struct DefineStmt : Visitable<Stmt, DefineStmt> {
     bool export_ = false;
     bool intact = false;
+    std::string export_params;
     std::string lhs;
     Expr *rhs;
     Module *module;
@@ -462,6 +467,19 @@ struct ImportStmt : Visitable<Stmt, ImportStmt> {
     }
 };
 
+struct PreprocessDefineStmt : Visitable<Stmt, PreprocessDefineStmt> {
+    std::string ident;   
+    long value;
+    PreprocessDefineStmt(std::string &ident, long value) :
+        ident(std::move(ident)),
+        value(value) {
+#ifdef DEBUG_CLS 
+        printf("new PreprocessDefineStmt: ident: %s, value: %ld\n",
+                ident.c_str(), value);
+#endif
+    }
+};
+
 void stmt_free(Stmt *stmt);
 
 // Visitor imp
@@ -488,14 +506,6 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         stmt.accept(*this);
     }
 
-    void visit(DefineStmt &stmt) override {
-        printf("%*s%s\n", 2 * depth, "", "DefineStmt");
-        depth++;
-        printf("%*s%s\n", 2 * depth, "", stmt.lhs.c_str());
-        visit(*stmt.rhs);
-        depth--;
-    }
-
     void visit(ActionStmt &stmt) override {
         printf("%*s%s\n", 2 * depth, "", "ActionStmt");
         printf("%*s%s\n", 2 * (depth + 1), "", stmt.ident.c_str());
@@ -505,6 +515,18 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     void visit(CppStmt &stmt) override {
         printf("%*s%s\n", 2 * depth, "", "CppStmt");
         printf("%*s%s\n", 2 * (depth + 1), "", stmt.code.c_str());
+    }
+
+    void visit(DefineStmt &stmt) override {
+        printf("%*s%s%s\n", 2 * depth, "", "DefineStmt", stmt.export_ ? " export" : "");
+        depth++;
+        ident(stdout, depth);
+        if (stmt.export_params.size()) {
+            printf("(%s) ", stmt.export_params.c_str());
+        }
+        printf("%s\n", stmt.lhs.c_str());
+        visit(*stmt.rhs);
+        depth--;
     }
 
     void visit(EmptyStmt &stmt) override {
@@ -519,13 +541,20 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         }
     }
 
+    void visit(PreprocessDefineStmt &stmt) override {
+        printf("%*s%s\n", 2 * depth, "", "PreprocessDefineStmt");
+        printf("%*s%s %ld\n", 2 * (depth + 1), "", stmt.ident.c_str(), stmt.value);
+    }
+
     // expr
     void visit(Expr &expr) override {
         if (expr.entering.size()) {
             printf("%*s%s\n", 2 * depth, "", "@entering");
             depth++;
             for (auto a : expr.entering) {
-                a->accept(*this);
+                ident(stdout, depth);
+                printf("%ld\n", a.second);
+                a.first->accept(*this);
             }
             depth--;
         }
@@ -533,7 +562,9 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
             printf("%*s%s\n", 2 * depth, "", "@finishing");
             depth++;
             for (auto a : expr.finishing) {
-                a->accept(*this);
+                ident(stdout, depth);
+                printf("%ld\n", a.second);
+                a.first->accept(*this);
             }
             depth--;
         }
@@ -541,7 +572,9 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
             printf("%*s%s\n", 2 * depth, "", "@leaving");
             depth++;
             for (auto a : expr.leaving) {
-                a->accept(*this);
+                ident(stdout, depth);
+                printf("%ld\n", a.second);
+                a.first->accept(*this);
             }
             depth--;
         }
@@ -549,7 +582,9 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
             printf("%*s%s\n", 2 * depth, "", "@transiting");
             depth++;
             for (auto a : expr.transiting) {
-                a->accept(*this);
+                ident(stdout, depth);
+                printf("%ld\n", a.second);
+                a.first->accept(*this);
             }
             depth--;
         }
@@ -560,16 +595,20 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         std::string info = expr.dump_info();
         printf("%*s%s%s\n", 2 * depth, "", "BracketExpr: ", info.c_str());
         printf("%*s", 2 * (depth + 1), "");
-        for (long i = 0, j; i < expr.charset.size(); ) {
-            if (!expr.charset[i]) {
-                i++;
-            } else {
-                for (j = i; j < expr.charset.size() && expr.charset[j]; j++);
-                printf(" %ld-%ld", i, j - 1);
-                i = j;
-            }
+        for (auto &x : expr.intervals.to) {
+            printf("(%ld,%ld)", x.first, x.second);
         }
         puts("");
+    }
+
+    void visit(CallExpr &expr) override {
+        printf("%*s%s\n", 2 * depth, "", "CallExpr");
+        printf("%*s", 2 * (depth + 1), "");
+        if (expr.qualified.size()) {
+            printf("%s::%s\n", expr.qualified, expr.ident.c_str());
+        } else {
+            printf("%s\n", expr.ident.c_str());
+        }
     }
     
     void visit(ClosureExpr &expr) override {
@@ -666,14 +705,6 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         depth--;
     }
 
-    void visit(UnicodeRangeExpr &expr) override {
-        printf("%*s%s\n", 2 * depth, "", "UnicodeRangeExpr");
-        ident(stdout, depth + 1);
-        printf("[%ld,%ld]\n", expr.start, expr.end);
-        depth++;
-        depth--;
-    }
-
     void visit(UnionExpr &expr) override {
         printf("%*s%s\n", 2 * depth, "", "UnionExpr");
         depth++;
@@ -694,15 +725,15 @@ struct PreorderStmtVisitor : Visitor<Stmt> {
 #endif
     }
 
-    void visit(DefineStmt &stmt) override {
-#ifdef DEBUG_CLS 
-        printf("visit PreorderStmtVisitor DefineStmt\n");
-#endif
-    }
-
     void visit(CppStmt &stmt) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor CppStmt\n");
+#endif
+    }
+
+    void visit(DefineStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderStmtVisitor DefineStmt\n");
 #endif
     }
 
@@ -715,6 +746,12 @@ struct PreorderStmtVisitor : Visitor<Stmt> {
     void visit(ImportStmt &stmt) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor ImportStmt\n");
+#endif
+    }
+
+    void visit(PreprocessDefineStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderStmtVisitor PreprocessDefineStmt\n");
 #endif
     }
 };
@@ -884,12 +921,6 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         visit(*expr.inner);
     }
 
-    void visit(UnicodeRangeExpr &expr) override {
-#ifdef DEBUG_CLS 
-        printf("visit PreorderActionExprStmtVisitor UnicodeRangeExpr\n");
-#endif
-    }
-
     void visit(UnionExpr &expr) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor UnionExpr\n");
@@ -937,6 +968,12 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
     void visit(ImportStmt &stmt) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor ImportStmt\n");
+#endif
+    }
+
+    void visit(PreprocessDefineStmt &stmt) override {
+#ifdef DEBUG_CLS 
+        printf("visit PreorderActionExprStmtVisitor PreprocessDefineStmt\n");
 #endif
     }
 

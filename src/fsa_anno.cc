@@ -1,4 +1,5 @@
 #include "fsa_anno.hh"
+#include "compiler.hh"
 
 #include <algorithm>
 #include <utility>
@@ -18,15 +19,27 @@ bool assoc_has_expr(std::vector<std::pair<Expr*, ExprTag>> &as, Expr *x) {
     return it != as.end() && it->first == x;
 }
 
+void sort_assoc(std::vector<std::pair<Expr*, ExprTag>> &as) {
+    std::sort(ALL(as));
+    auto i = as.begin();
+    auto j = i;
+    auto k = i;
+    for (; i != as.end(); i = j) {
+        while (++j != as.end() && i->first == j->first) {
+            i->second = ExprTag(long(i->second) | long(j->second));
+        }
+        *k++ = *i;
+    }
+    as.erase(k, as.end());
+}
+
 FsaAnno FsaAnno::bracket(BracketExpr &expr) {
     FsaAnno r;
     r.fsa.start = 0;
     r.fsa.finals = {1};
     r.fsa.adj.resize(2);
-    REP (c, 256) {
-        if (expr.charset[c]) {
-            r.fsa.adj[0].emplace_back(std::make_pair(c, c + 1), 1);
-        }
+    for (auto &x : expr.intervals.to) {
+        r.fsa.adj[0].emplace_back(x, 1);
     }
     r.assoc.resize(2);
     r.add_assoc(expr);
@@ -34,14 +47,26 @@ FsaAnno FsaAnno::bracket(BracketExpr &expr) {
     return r;
 }
 
-FsaAnno FsaAnno::collapse(CollapseExpr &expr) {
-    static long label = 256;
+FsaAnno FsaAnno::call(CallExpr &expr) {
     FsaAnno r;
     r.fsa.start = 0;
     r.fsa.finals = {1};
     r.fsa.adj.resize(2);
-    r.fsa.adj[0].emplace_back(std::make_pair(label, label + 1), 1);
-    label++;
+    r.fsa.adj[0].emplace_back(std::make_pair(call_label, call_label + 1), 1);
+    call_label++;
+    r.assoc.resize(2);
+    r.add_assoc(expr);
+    r.deterministic = true;
+    return r;
+}
+
+FsaAnno FsaAnno::collapse(CollapseExpr &expr) {
+    FsaAnno r;
+    r.fsa.start = 0;
+    r.fsa.finals = {1};
+    r.fsa.adj.resize(2);
+    r.fsa.adj[0].emplace_back(std::make_pair(collapse_label, collapse_label + 1), 1);
+    collapse_label++;
     r.assoc.resize(2);
     r.add_assoc(expr);
     r.deterministic = true;
@@ -53,12 +78,51 @@ FsaAnno FsaAnno::dot(DotExpr *expr) {
     r.fsa.start = 0;
     r.fsa.finals = {1};
     r.fsa.adj.resize(2);
-    r.fsa.adj[0].emplace_back(std::make_pair(0L, 256), 1);
+    r.fsa.adj[0].emplace_back(std::make_pair(0L, AB), 1);
     r.assoc.resize(2);
     if (expr) {
         r.add_assoc(*expr);
     }
+    r.deterministic = true;
     return r;
+}
+
+FsaAnno FsaAnno::embed(EmbedExpr &expr) {
+    if (expr.define_stmt) {
+        FsaAnno r = compiled[expr.define_stmt];
+        REP (i, r.fsa.n()) {
+            auto it = upper_bound(ALL(r.fsa.adj[i]),
+                    std::make_pair(
+                        std::make_pair(call_label_base, LONG_MAX),
+                        LONG_MAX
+                    )
+            );
+            if (it != r.fsa.adj[i].begin() &&
+                    call_label_base < (it - 1)->first.second) {
+                --it;
+            }
+            for (; it != r.fsa.adj[i].end() && it->first.first < call_label; ++it) {
+                assert(call_label_base <= it->first.first);
+                long t = it->first.second - it->first.first;
+                it->first.first = call_label;
+                call_label += t;
+                it->first.second = call_label;
+                assert(it->first.second <= call_label);
+            }
+        }
+        r.add_assoc(expr);
+        return r;
+    } else {
+        FsaAnno r;
+        r.fsa.start = 0;
+        r.fsa.finals = {1};
+        r.fsa.adj.resize(2);
+        r.fsa.adj[0].emplace_back(std::make_pair(expr.macro_value, expr.macro_value + 1), 1);
+        r.assoc.resize(2);
+        r.add_assoc(expr);
+        r.deterministic = true;
+        return r;
+    }
 }
 
 FsaAnno FsaAnno::epsilon_fsa(EpsilonExpr *expr) {
@@ -74,18 +138,16 @@ FsaAnno FsaAnno::epsilon_fsa(EpsilonExpr *expr) {
     return r;
 }
 
-
 FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     FsaAnno r;
     r.fsa.start = 0;
     long len = 0;
-
-    len = expr.literal.size();
-    r.fsa.adj.resize(len + 1);
-    REP (i, expr.literal.size()) {
-        long c = (u8)expr.literal[i];
-        r.fsa.adj[i].emplace_back(std::make_pair(c, c + 1), i + 1);
+    for (i32 c = 0, i = 0; i < expr.literal.size(); len++) {
+        U8_NEXT_OR_FFFD(expr.literal.c_str(), i, expr.literal.size(), c);
+        r.fsa.adj.emplace_back();
+        r.fsa.adj[len].emplace_back(std::make_pair(c, c + 1), len + 1);
     }
+    r.fsa.adj.emplace_back();
     r.fsa.finals.push_back(len);
     r.assoc.resize(len + 1);
     r.add_assoc(expr);
@@ -93,70 +155,7 @@ FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     return r;
 }
 
-FsaAnno FsaAnno::unicode_range(UnicodeRangeExpr &expr) {
-    FsaAnno r;
-    /*
-    long n = 0;
-    struct Trie {
-        long id = 1;
-        long refcnt = 1;
-        std::map<int, Trie*> ch;
-        ~Trie() {
-            for (auto c : ch) {
-                if (!--c.second->refcnt) {
-                    delete c.second;
-                }
-            }
-        }
-    } root;
-    root.id = n++;
-    r.fsa.start = 0;
-
-    Trie *last = NULL;
-    FOR (i, expr.start, expr.end) {
-        u8 s[4];
-        long len = 0;
-        U8_APPEND_UNSAFE(s, len, i);
-        Trie *x = &root;
-        Trie *y;
-        REP (j, len) {
-            auto it = x->ch.find(s[j]);
-            if (it == x->ch.end()) {
-                if (j == len - 1 && last) {
-                    y = last;
-                    y->refcnt++;
-                } else {
-                    y = new Trie;
-                    y->id = n++;
-                }
-                x->ch[s[j]] = y;
-                x = y;
-            } else {
-                x = it->second;
-            }
-        }
-        if (!last) {
-            last = x;
-        }
-        r.fsa.finals.push_back(x->id);
-    }
-
-    r.fsa.adj.resize(n);
-    std::function<void(Trie*)> dfs = [&] (Trie *x) {
-        for (auto &c : x->ch) {
-            r.fsa.adj[x->id].emplace_back(c.first, c.second->id);
-            dfs(c.second);
-        }
-    };
-    dfs(&root);
-    std::sort(ALL(r.fsa.finals));
-    r.assoc.resize(n);
-    r.add_assoc(expr);
-    */
-    return r;
-}
-
-void FsaAnno::accessible() {
+void FsaAnno::accessible(const std::vector<long> *start, std::vector<long> &mapping) {
     long allo = 0;
     auto relate = [&] (long x) {
         if (allo != x) {
@@ -164,11 +163,11 @@ void FsaAnno::accessible() {
         }
         allo++;
     };
-    fsa.accessible(relate);
+    fsa.accessible(start, relate);
     assoc.resize(allo);
 }
 
-void FsaAnno::co_accessible() {
+void FsaAnno::co_accessible(const std::vector<bool> *final, std::vector<long> &mapping) {
     long allo = 0;
     auto relate = [&] (long x) {
         if (allo != x) {
@@ -176,9 +175,10 @@ void FsaAnno::co_accessible() {
         }
         allo++;
     };
-    fsa.co_accessible(relate);
+    fsa.co_accessible(final, relate);
     if (fsa.finals.empty()) {
         assoc.assign(1, {});
+        mapping.assign(1, 0);
         deterministic = true;
         return;
     }
@@ -202,6 +202,7 @@ eg: ident = [a-z] [0-9]*
 void FsaAnno::add_assoc(Expr &expr) {
     if (expr.no_action() &&
             !expr.stmt->intact &&
+            !dynamic_cast<CallExpr*>(&expr) &&
             !dynamic_cast<CollapseExpr*>(&expr)) {
         return;
     }
@@ -222,11 +223,24 @@ void FsaAnno::add_assoc(Expr &expr) {
         }
         sorted_insert(assoc[i], std::make_pair(&expr, tag));
     }
+    if (expr.leaving.size() || expr.entering.size() || expr.transiting.size()) {
+        for (auto action : expr.transiting) {
+            REP (i, fsa.n()) {
+                fsa.adj[i].emplace_back(std::make_pair(action_label, action_label + 1), i);
+                action_label++;
+            }
+        }
+    } else if (expr.finishing.size()) {
+        for (long f : fsa.finals)  {
+            fsa.adj[f].emplace_back(std::make_pair(action_label, action_label + 1), f);
+            action_label++;
+        }
+    }
 }
 
 void FsaAnno::complement(ComplementExpr *expr) {
     if (!deterministic) {
-        fsa = fsa.determinize([&](long, const std::vector<long>&) {});
+        fsa = fsa.determinize(NULL, [&](long, const std::vector<long>&) {});
     }
     fsa = ~fsa;
     assoc.assign(fsa.n(), {});
@@ -246,7 +260,7 @@ void FsaAnno::concat(FsaAnno& rhs, ConcatExpr *expr) {
         fsa.adj.emplace_back(std::move(es));
     }
     fsa.finals = std::move(rhs.fsa.finals);
-    for (long& f: fsa.finals) {
+    for (long &f : fsa.finals) {
         f += ln;
     }
     assoc.resize(fsa.n());
@@ -259,21 +273,7 @@ void FsaAnno::concat(FsaAnno& rhs, ConcatExpr *expr) {
     deterministic = false;
 }
 
-void sort_assoc(std::vector<std::pair<Expr*, ExprTag>> &as) {
-    std::sort(ALL(as));
-    auto i = as.begin();
-    auto j = i;
-    auto k = i;
-    for (; i != as.end(); i = j) {
-        while (++j != as.end() && i->first == j->first) {
-            i->second = ExprTag(long(i->second) | long(j->second));
-        }
-        *k++ = *i;
-    }
-    as.erase(k, as.end());
-}
-
-void FsaAnno::determinize() {
+void FsaAnno::determinize(const std::vector<long> *start, std::vector<std::vector<long>> *mapping) {
     if (deterministic)  {
         return;
     }
@@ -281,14 +281,20 @@ void FsaAnno::determinize() {
     auto relate = [&] (long id, const std::vector<long> &xs) {
         if (id + 1 > new_assoc.size()) {
             new_assoc.resize(id + 1);
+            if (mapping) {
+                mapping->resize(id + 1);
+            }
         }
         auto &as = new_assoc[id];
         for (long x : xs) {
             as.insert(as.end(), ALL(assoc[x]));
         }
         std::sort(ALL(as));
+        if (mapping) {
+            (*mapping)[id] = xs;
+        }
     };
-    fsa = fsa.determinize(relate);
+    fsa = fsa.determinize(start, relate);
     assoc = std::move(new_assoc);
     deterministic = true;
 }
@@ -315,10 +321,10 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr *expr) {
         }
     };
     if (!deterministic) {
-        fsa = fsa.determinize(relate0);
+        fsa = fsa.determinize(NULL, relate0);
     }
     if (!rhs.deterministic) {
-        rhs.fsa = rhs.fsa.determinize([](long, const std::vector<long>&) {});
+        rhs.fsa = rhs.fsa.determinize(NULL, [](long, const std::vector<long>&) {});
     }
     fsa = fsa.difference(rhs.fsa, relate);
     assoc = std::move(new_assoc);
@@ -326,17 +332,6 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr *expr) {
         add_assoc(*expr);
     }
     deterministic = true;
-}
-
-void FsaAnno::embed(EmbedExpr &expr) {
-    // TODO
-    /*
-    fsa.start = 0;
-    fsa.finals = {0};
-    fsa.adj.assign(1, {});
-    assoc.clear();
-    assoc.emplace_back(1, &expr);
-    */
 }
 
 void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr *expr) {
@@ -349,7 +344,7 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr *expr) {
         rel0[id] = xs;
     };
     auto relate1 = [&](long id, const std::vector<long>& xs) {
-        if (id + 1 > rel0.size()) {
+        if (id + 1 > rel1.size()) {
             rel1.resize(id + 1);
         }
         rel1[id] = xs;
@@ -357,22 +352,28 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr *expr) {
     auto relate = [&](long x, long y) {
         new_assoc.emplace_back();
         auto &as = new_assoc.back();
-        if (rel0.empty())
+        if (rel0.empty()) {
             as.insert(as.end(), ALL(assoc[x]));
-        else
-            for (long u: rel0[x])
+        } else {
+            for (long u: rel0[x]) {
                 as.insert(as.end(), ALL(assoc[u]));
-        if (rel1.empty())
+            }
+        }
+        if (rel1.empty()) {
             as.insert(as.end(), ALL(rhs.assoc[y]));
-        else
-            for (long v: rel1[y])
+        } else {
+            for (long v: rel1[y]) {
                 as.insert(as.end(), ALL(rhs.assoc[v]));
+            }
+        }
         sort_assoc(as);
     };
-    if (! deterministic)
-        fsa = fsa.determinize(relate0);
-    if (! rhs.deterministic)
-        rhs.fsa = rhs.fsa.determinize(relate1);
+    if (!deterministic) {
+        fsa = fsa.determinize(NULL, relate0);
+    }
+    if (!rhs.deterministic) {
+        rhs.fsa = rhs.fsa.determinize(NULL, relate1);
+    }
     fsa = fsa.intersect(rhs.fsa, relate);
     assoc = std::move(new_assoc);
     if (expr) {
@@ -381,7 +382,7 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr *expr) {
     deterministic = true;
 }
 
-void FsaAnno::minimize() {
+void FsaAnno::minimize(std::vector<std::vector<long>> *mapping) {
     assert(deterministic);
     decltype(assoc) new_assoc;
     auto relate = [&] (std::vector<long> & xs) {
@@ -391,6 +392,9 @@ void FsaAnno::minimize() {
             as.insert(as.end(), ALL(assoc[x]));
         }
         sort_assoc(as);
+        if (mapping) {
+            mapping->push_back(xs);
+        }
     };
     fsa = fsa.hopcroft_minimize(relate);
     assoc = std::move(new_assoc);
@@ -478,7 +482,6 @@ void FsaAnno::repeat(RepeatExpr &expr) {
     *this = std::move(r);
 }
 
-
 void FsaAnno::star(ClosureExpr *expr) {
     long src = fsa.n();
     long sink = src + 1;
@@ -512,11 +515,11 @@ void FsaAnno::substring_grammar() {
         bool ok = true;
         for (auto aa : assoc[i]) {
             if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
-                if (e->define_stmt->intact && long(aa.second) & long(ExprTag::inner)) {
+                if (e->define_stmt->intact && has_inner(aa.second)) {
                     ok = false;
                     break;
                 }
-            } else if (aa.first->stmt->intact && long(aa.second) & long(ExprTag::inner)) {
+            } else if (aa.first->stmt->intact && has_inner(aa.second)) {
                 ok = false;
                 break;
             }

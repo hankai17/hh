@@ -16,6 +16,16 @@
 #define MAGENTA "\x1b[35m"
 #define CYAN    "\x1b[36m"
 
+long AB = MAX_CODEPOINT + 1;
+Mode opt_mod = Mode::cxx;
+
+long action_label;
+long action_label_base;
+long call_label;
+long call_label_base;
+long collapse_label;
+long collapse_label_base;
+
 static const char *ENAME[] = {
     /*   0 */ "",
     /*   1 */ "EPERM", "ENOENT", "ESRCH", "EINTR", "EIO", "ENXIO",

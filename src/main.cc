@@ -31,7 +31,6 @@ int main(int argc, char **argv) {
 
     static struct option long_options[] = {
         {"help",    no_argument,       0,  'h'},
-        {"module-info",  required_argument,   0,  'm'},
         {"output",  required_argument,   0,  'O'},
         {0,         0,                  0,  'h'},
     };
@@ -44,13 +43,10 @@ int main(int argc, char **argv) {
                 print_help(stdout);
                 break;
             case 'm':
-                opt_module_info = true;
                 break;
             case 'o':
-                opt_output_filename = optarg;
                 break;
             case 't':
-                opt_dump_tree = true;
                 break;
             case '?':
                 print_help(stderr);

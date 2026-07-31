@@ -8,37 +8,27 @@
 #include <functional>
 #include <unordered_map>
 #include <algorithm>
+#include <cassert>
+#include <climits>
 
 #define DEBUG_COMP 1
 
-static std::map<DefineStmt *, FsaAnno> compiled;
+std::unordered_map<DefineStmt*, FsaAnno> compiled;
+static std::unordered_map<DefineStmt*, std::vector<std::pair<long, long>>> stmt2call_addr;
+static std::unordered_map<DefineStmt*, std::vector<bool>> stmt2final;
 
-static void print_assoc(const FsaAnno &anno) {
+void print_assoc(const FsaAnno &anno) {
     printf("====== Associated Expr of each state\n");
     REP (i, anno.fsa.n()) {
         printf("%ld: ", i);
         for (auto aa : anno.assoc[i]) {
             auto a = aa.first;
-            //auto tag = aa.second;
-            //const char *name = typeid(*a).name();
-            //while (name && isdigit(name[0])) {
-            //    name++;
-            //}
-            //std::string t = name;
-            //t = t.substr(t.size() - 4);
-            //std::string st_name;
-            //if (a->stmt) {
-            //    st_name = a->stmt->lhs;
-            //}
-            //printf(" %s %s%d(%ld-%ld", st_name.c_str(),
-            //        t.c_str(),
-            //        (int)tag,
-            //        a->loc.start,
-            //        a->loc.end);
-            printf(" %s(%ld-%ld)",
+            printf(" %s%s%s%s(%ld-%ld)",
                     a->name().c_str(),
-                    a->loc.start,
-                    a->loc.end);
+                    has_start(aa.second) ? "^" : "",
+                    has_inner(aa.second) ? "." : "",
+                    has_final(aa.second) ? "$" : "",
+                    a->loc.start, a->loc.end);
             if (a->entering.size()) {
                 printf(",>%zd", a->entering.size());
             }
@@ -58,7 +48,7 @@ static void print_assoc(const FsaAnno &anno) {
     puts("");
 }
 
-static void print_fsa(const Fsa &fsa) {
+void print_fsa(const Fsa &fsa) {
     printf("====== Automato\n");
     printf("start: %ld\n", fsa.start);
     printf("finals:");
@@ -69,11 +59,6 @@ static void print_fsa(const Fsa &fsa) {
     puts("edges:");
     REP (i, fsa.n()) {
         printf("%ld: ", i);
-        /*
-        for (auto &x : fsa.adj[i]) {
-            printf(" (%ld, %ld)", x.first, x.second);
-        }
-        */
         for (auto it = fsa.adj[i].begin(); it != fsa.adj[i].end();) {
             long from = it->first.first;
             long to = it->first.second;
@@ -166,6 +151,13 @@ struct Compiler : Visitor<Expr> {
         st.push(FsaAnno::bracket(expr));
     }
 
+    void visit(CallExpr &expr) override {
+#ifdef DEBUG_COMP
+        std::cout << "Compiler visit CallExpr" << std::endl;
+#endif
+        st.push(FsaAnno::call(expr));
+    }
+
     void visit(ClosureExpr &expr) override {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit ClosureExpr" << std::endl;
@@ -178,9 +170,7 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit CollapseExpr" << std::endl;
 #endif
-        //st.push(FsaAnno::collapse(expr));
-        auto anno = FsaAnno::collapse(expr);
-        st.push(anno);
+        st.push(FsaAnno::collapse(expr));
     }
 
     void visit(ComplementExpr &expr) override {
@@ -222,9 +212,7 @@ struct Compiler : Visitor<Expr> {
 #ifdef DEBUG_COMP
         std::cout << "Compiler visit EmbedExpr" << std::endl;
 #endif
-        FsaAnno anno = compiled[expr.define_stmt];
-        anno.add_assoc(expr);
-        st.push(anno);
+        st.push(FsaAnno::embed(expr));
     }
 
     void visit(EpsilonExpr &expr) override {
@@ -284,13 +272,6 @@ struct Compiler : Visitor<Expr> {
         visit(*expr.lhs);
         st.top().union_(rhs, &expr);
     }
-
-    void visit(UnicodeRangeExpr &expr) override {
-#ifdef DEBUG_COMP
-        std::cout << "Compiler visit UnicodeRangeExpr" << std::endl;
-#endif
-        st.push(FsaAnno::unicode_range(expr));
-    }
 };
 
 void compile(DefineStmt *stmt) {
@@ -301,16 +282,18 @@ void compile(DefineStmt *stmt) {
     Compiler comp;
     comp.visit(*stmt->rhs);
     anno = std::move(comp.st.top());
-    anno.determinize();
-    anno.minimize();
+    anno.determinize(NULL, NULL);
+    anno.minimize(NULL);
     printf("size(%s::%s) = %ld\n",
             stmt->module->filename.c_str(),
             stmt->lhs.c_str(),
             anno.fsa.n());
 }
 
-void compile_actions(DefineStmt *stmt) {
+void generate_transitions(DefineStmt *stmt) {
     FsaAnno &anno = compiled[stmt];
+    auto &call_addr = stmt2call_addr[stmt];
+    auto &sub_final = stmt2final[stmt];
     auto find_within = [&] (long u) {
         std::vector<std::pair<Expr*, ExprTag>> within;
         Expr *last = NULL;
@@ -329,6 +312,16 @@ void compile_actions(DefineStmt *stmt) {
             }
         }
         std::sort(ALL(within));
+        auto j = within.begin();
+        for (auto i = within.begin(); i != within.end();) {
+            Expr *x = i->first;
+            long t = long(i->second);
+            while (++i != within.end() && x == i->first) {
+                t |= long(i->second);
+            }
+            *j++ = { x, ExprTag(t) };
+        }
+        within.erase(j, within.end());
         return within;
     };
     decltype(anno.assoc) withins(anno.fsa.n());
@@ -339,25 +332,54 @@ void compile_actions(DefineStmt *stmt) {
         if (auto t = dynamic_cast<InlineAction*>(action)) {
             return t->code;
         } else if (auto t = dynamic_cast<RefAction*>(action)) {
-            return t->define_module->defined_action[t->ident];
+            return t->define_stmt->code;
+        } else {
+            assert(0);
         }
         return std::string();
     };
-#define D(S)                                                            \
-    if (auto t = dynamic_cast<InlineAction*>(action)) {                 \
-        printf(" %ld, %ld, %ld, %s\n", u, e.first, v, t->code.c_str()); \
-    } else if (auto t = dynamic_cast<RefAction*>(action)) {             \
-        printf(" %ld, %ld, %ld, %s\n", u, e.first, v,                   \
-            t->define_module->defined_action[t->ident].c_str());        \
+#define D(S)                                                                    \
+    if (auto t = dynamic_cast<InlineAction*>(action.first)) {                   \
+        if (from == to - 1) {                                                   \
+            printf(" %ld, %ld, %ld, %s\n", u, from, v, t->code.c_str());        \
+        } else {                                                                \
+            printf(" %ld %ld-%ld %ld %s\n",                                     \
+                u, from, to - 1, v, t->code.c_str());                           \
+        }                                                                       \
+    } else if (auto t = dynamic_cast<RefAction*>(action.first)) {               \
+        if (from == to - 1) {                                                   \
+            printf(" %ld, %ld, %ld, %s\n", u, from, v,                          \
+                t->define_stmt->code.c_str());                                  \
+        } else {                                                                \
+            printf(" %ld %ld-%ld %ld %s\n",                                     \
+                u, from, to - 1, v, t->define_stmt->code.c_str());              \
+        }                                                                       \
     }
-    fprintf(output, "long hh_%s_transit(long u, long c)\n", stmt->lhs.c_str());
-    fprintf(output, "{\n");
-    ident(output, 1);
-    fprintf(output, "long v = -1;\n");
-    ident(output, 1);
-    fprintf(output, "switch (u) {\n");
+
+    fprintf(output, "long hh_%s_transit(std::vector<long> &ret_stack, long u, long c)\n", stmt->lhs.c_str());
+    if (stmt->export_params.size()) {
+        fprintf(output, ", %s);\n", stmt->export_params.c_str());
+    }
+    fprintf(output,
+            "{\n"
+            "   long v = -1;\n"
+            "again:\n"
+            "   switch (u) {\n"
+    );
     REP (u, anno.fsa.n()) {
-        if (anno.fsa.adj[u].empty()) {
+        if (call_addr[u].first >= 0) {
+            fprintf(output,
+                    "   case %ld:\n"
+                    "       u = %ld;\n",
+            u, call_addr[u].first);
+
+            fprintf(output,
+                    "   ret_stack.push_back(%ld);\n"
+                    "   goto again;\n",
+            call_addr[u].second);
+            continue;
+        }
+        if (anno.fsa.adj[u].empty() && !sub_final[u]) {
             continue;
         }
         ident(output, 1);
@@ -368,7 +390,7 @@ void compile_actions(DefineStmt *stmt) {
             long,
             std::pair<
                     std::vector<std::pair<long, long>>,
-                    std::stringstream
+                    std::vector<std::pair<Action*, long>>
             >
         > v2case;
         for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end();) {
@@ -381,7 +403,7 @@ void compile_actions(DefineStmt *stmt) {
                 to = it->first.second;
             }
             v2case[v].first.emplace_back(from, to);
-            std::stringstream &body = v2case[v].second;
+            auto &body = v2case[v].second;
             auto ie = withins[u].end();
             auto je = withins[v].end();
             for (auto i = withins[u].begin(), j = withins[v].begin(); i != ie; ++i) {
@@ -390,8 +412,7 @@ void compile_actions(DefineStmt *stmt) {
                 }
                 if (j == je || i->first != j->first) {
                     for (auto action : i->first->leaving) {
-                        ident(output, 3);
-                        body << "{" << get_code(action) << "}\n";
+                        body.push_back(action);
                     }
                 }
             }
@@ -401,8 +422,7 @@ void compile_actions(DefineStmt *stmt) {
                 }
                 if (i == ie || i->first != j->first) {
                     for (auto action : j->first->entering) {
-                        ident(output, 3);
-                        body << "{" << get_code(action) << "}\n";
+                        body.push_back(action);
                     }
                 }
             }
@@ -412,8 +432,7 @@ void compile_actions(DefineStmt *stmt) {
                 }
                 if (i != ie || i->first == j->first) {
                     for (auto action : j->first->transiting) {
-                        ident(output, 3);
-                        body << "{" << get_code(action) << "}\n";
+                        body.push_back(action);
                     }
                 }
             }
@@ -422,10 +441,9 @@ void compile_actions(DefineStmt *stmt) {
                     ++i;
                 }
                 if (i != ie && i->first == j->first &&
-                        long(j->second) & long(ExprTag::final)) {
+                        has_final(j->second)) {
                     for (auto action : j->first->finishing) {
-                        ident(output, 3);
-                        body << "{" << get_code(action) << "}\n";
+                        body.push_back(action);
                     }
                 }
             }
@@ -440,7 +458,27 @@ void compile_actions(DefineStmt *stmt) {
                 }
             }
             ident(output, 3);
-            fprintf(output, "v = %ld;\n%s", x.first, x.second.second.str().c_str());
+            fprintf(output, "v = %ld;\n", x.first);
+            
+            std:;sort(ALL(x.second.second), [] (const std::pair<Action*, long> &a0,
+                    const std::pair<Action*, long> &a1) {
+                return a0.second != a1.second ?
+                        a0.second < a1.second : a0.first < a1.first;
+            });
+            x.second.second.erase(std::unique(ALL(x.second.second)), x.second.second.end());
+            for (auto a : x.second.second) {
+                fprintf(output, "{%s}\n", get_code(a.first).c_str());
+            }
+            ident(output, 3);
+            fprintf(output, "break;\n");
+        }
+        if (sub_final[u]) {
+            ident(output, 2);
+            fprintf(output, "default;\n");
+            ident(output, 3);
+            fprintf(output,
+                    "if (ret_stack.size()) { u = ret_stack.back(); ret_stack.pop_back(); goto again; }\n"
+            );
             ident(output, 3);
             fprintf(output, "break;\n");
         }
@@ -453,10 +491,10 @@ void compile_actions(DefineStmt *stmt) {
     fprintf(output, "}\n");
     ident(output, 1);
     fprintf(output, "return v;\n");
-    fprintf(output, "}\n");
+    fprintf(output, "}\n\n");
 }
 
-void compile_export(DefineStmt *stmt) {                                // 展开所有 & 引用（CollapseExpr） 把被引用的自动机状态合并进来
+bool compile_export(DefineStmt *stmt) {                                // 展开所有 & 引用（CollapseExpr） 把被引用的自动机状态合并进来
     printf("Exporting %s\n", stmt->lhs.c_str());                        //  用 ε 转移连接引用点 最终构造一个完整的、不依赖其他定义的状态机
     FsaAnno &anno = compiled[stmt];                                     //  注意这里只修改 anno 不会改变 stmt 语法树
 
@@ -466,134 +504,306 @@ void compile_export(DefineStmt *stmt) {                                // 展开
     std::vector<std::vector<DefineStmt*>> cllps;
     long allo = 0;
     std::unordered_map<DefineStmt*, long> stmt2offset;
-    std::function<void(DefineStmt*)> allocate_collapse = [&] (DefineStmt *stmt) {
+    std::unordered_map<DefineStmt*, long> stmt2start;
+    std::unordered_map<long, DefineStmt*> start2stmt;
+    std::vector<long> starts;
+    std::vector<bool> sub_final;;
+    std::function<void(DefineStmt*)> allocate = [&] (DefineStmt *stmt) {
         if (stmt2offset.count(stmt))  {
             return;
         }
         printf("Allocate %ld to %s\n", allo, stmt->lhs.c_str());
         FsaAnno &anno = compiled[stmt];
-
-        printf("---------------------->\n");
-        print_fsa(anno.fsa);
-        print_assoc(anno);
-        printf("<----------------------\n");
-
-        long old = stmt2offset[stmt] = allo;
-        allo += anno.fsa.n() + 1;
-        adj.insert(adj.end(), ALL(anno.fsa.adj));
-        REP (i, anno.fsa.n()) {
-            for (auto &e : adj[old + i]) {
-                e.second += old;
+        long base = stmt2offset[stmt] = allo;
+        //printf("---------------------->\n");
+        //print_fsa(anno.fsa);
+        //print_assoc(anno);
+        //printf("<----------------------\n");
+        allo += anno.fsa.n();
+        sub_final.resize(allo);
+        if (used_as_call.count(stmt)) {
+            stmt2start[stmt] = base + anno.fsa.start;
+            start2stmt[base + anno.fsa.start] = stmt;
+            starts.push_back(base + anno.fsa.start);
+            for (long f : anno.fsa.finals) {
+                sub_final[base + f] = true;
             }
         }
-        adj.emplace_back();
+        adj.insert(adj.end(), ALL(anno.fsa.adj));
+        REP (i, anno.fsa.n()) {
+            for (auto &e : adj[base + i]) {
+                e.second += base;
+            }
+        }
         assoc.insert(assoc.end(), ALL(anno.assoc));
-        assoc.emplace_back();
-        FOR (i, old, old + anno.fsa.n()) {
-            if (anno.fsa.has_special(i - old)) {                               // 这个状态有引用转移
-                for (auto aa : assoc[i]) {
-                    if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {  // 找到 引用转移的边
-                        DefineStmt *v = e->define_stmt;                     // 找到 最原始处的定义
-                        allocate_collapse(v);
+        FOR (i, base, base + anno.fsa.n()) {
+            for (auto aa : assoc[i]) {
+                if (has_start(aa.second)) {
+                    if (auto e = dynamic_cast<CallExpr *>(aa.first)) {
+                        DefineStmt *v = e->define_stmt;
+                        allocate(v);
+                    } else if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {   // 这个状态有引用转移
+                        DefineStmt *v = e->define_stmt;
+                        allocate(v);
                         sorted_emplace(adj[i],
-                                epsilon,
-                                stmt2offset[v] + compiled[v].fsa.start);
+                                epsilon, stmt2offset[v] + compiled[v].fsa.start);
                     }
                 }
-                long j = adj[i].size();
-                while (j && 256 < adj[i][j - 1].first.second) {
-                    long v = adj[i][j-1].second;
-                    if (adj[i][j - 1].first.first < 256) {
-                        adj[i][j - 1].first.second = 256;
-                    } else {
-                        j--;
-                    }
-                    for (auto aa : assoc[v]) {
-                        if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
-                            DefineStmt *w = e->define_stmt;
-                            allocate_collapse(w);
-                            for (long f : compiled[w].fsa.finals) {
-                                long g = stmt2offset[w] + f;
-                                sorted_emplace(adj[g], epsilon, v);
-                                if (g == i) {
-                                    j++;
-                                }
+            }
+            long j = adj[i].size();
+            while (j && collapse_label_base < adj[i][j - 1].first.second) {
+                long v = adj[i][j-1].second;
+                if (adj[i][j - 1].first.first < collapse_label_base) {
+                    adj[i][j - 1].first.second = collapse_label_base;
+                } else {
+                    j--;
+                }
+                CollapseExpr *e;
+                for (auto aa : assoc[v]) {
+                    if (has_final(aa.second) &&
+                            (e = dynamic_cast<CollapseExpr*>(aa.first))) {
+                        DefineStmt *w = e->define_stmt;
+                        allocate(w);
+                        for (long f : compiled[w].fsa.finals) {
+                            long g = stmt2offset[w] + f;
+                            sorted_emplace(adj[g], epsilon, v);
+                            if (g == i) {
+                                j++;
                             }
                         }
                     }
                 }
-                adj[i].resize(j);
             }
+            adj[i].resize(j);
         }
     };
-    allocate_collapse(stmt);
+    allocate(stmt);
     anno.fsa.adj = std::move(adj);
     anno.assoc = std::move(assoc);
     anno.deterministic = false;
+    printf(" of states: %ld", anno.fsa.n());
 
-    printf("last---------------------->\n");
-    print_fsa(anno.fsa);
-    print_assoc(anno);
-    printf("last<----------------------\n");
+    //printf("last---------------------->\n");
+    //print_fsa(anno.fsa);
+    //print_assoc(anno);
+    //printf("last<----------------------\n");
 
     if (1 && !stmt->intact) {
         printf("Constructing substring grammar\n");
         anno.substring_grammar();
+        printf(" of states: %ld", anno.fsa.n());
     }
 
-    printf("Determinize minimize, remove dead states\n");
-    anno.determinize();
-    anno.minimize();
-
-    anno.accessible();
-    anno.co_accessible();
-
-    /*
-    allo = 0;
-    auto relate = [&] (long x) {
-        if (allo != x) {
-            anno.assoc[allo] = std::move(anno.assoc[x]);
+    printf("Determinize\n");
+    std::vector<std::vector<long>> map0;
+    anno.determinize(&starts, &map0);
+    std::vector<bool> sub_final2(anno.fsa.n());
+    REP (i, anno.fsa.n()) {
+        for (long u : map0[i]) {
+            if (sub_final[u]) {
+                sub_final2[i] = true;
+            }
+            if (start2stmt.count(u)) {
+                DefineStmt *stmt = start2stmt[u];
+                if (stmt2start[stmt] < 0) {
+                    stmt->module->locfile.locate(stmt->loc,
+                            "the start has been included in multiple DFA states");
+                    return false;
+                }
+                stmt2start[stmt] = ~i;
+            }
         }
-        allo++;
-    };
-    anno.fsa.remove_dead(relate);
-    if (anno.fsa.finals.empty()) {
-        anno.assoc.assign(1, {});
-    } else {
-        anno.assoc.resize(allo);
     }
-    */
+    sub_final = std::move(sub_final2);
+    start2stmt.clear();
+    for (auto &it : stmt2start) {
+        it.second = ~ it.second;
+        start2stmt[it.second] = it.first;
+    }
+    printf(" of states: %ld", anno.fsa.n());
 
-    if (1) {
-        print_fsa(anno.fsa);
-        print_assoc(anno);
+    printf("Minimize\n");
+    map0.clear();
+    anno.minimize(&map0);
+    sub_final2.assign(anno.fsa.n(), false);
+    REP (i, anno.fsa.n()) {
+        for (long u : map0[i]) {
+            if (sub_final[u]) {
+                sub_final2[i] = true;
+            }
+            if (start2stmt.count(u)) {
+                DefineStmt * stmt = start2stmt[u];
+                stmt2start[stmt] = i;
+            }
+        }
     }
+    sub_final = std::move(sub_final2);
+    start2stmt.clear();
+    for (auto & it : stmt2start) {
+        start2stmt[it.second] = it.first;
+    }
+    printf(" of states: %ld", anno.fsa.n());
+     
+    if (1) {
+        printf("Keep accessible states\n");
+        starts.clear();
+        for (auto &it : stmt2start) {
+            starts.push_back(it.second);
+        }
+        std::vector<long> map1;
+        anno.accessible(&starts, map1);
+        sub_final2.assign(anno.fsa.n(), false);
+        REP (i, anno.fsa.n()) {
+            long u = map1[i];
+            sub_final2[i] = sub_final[u];
+            if (start2stmt.count(u)) {
+                stmt2start[start2stmt[u]] = i;
+            }
+        }
+        sub_final = std::move(sub_final2);
+        start2stmt.clear();
+        for (auto &it : stmt2start) {
+            start2stmt[it.second] = it.first;
+        }
+        printf(" of states: %ld", anno.fsa.n());
+    
+        printf("Keep co-accessible states\n");
+        map1.clear();
+        anno.co_accessible(&sub_final, map1);
+        sub_final2.assign(anno.fsa.n(), false);
+        REP (i, anno.fsa.n()) {
+            long u = map1[i];
+            sub_final2[i] = sub_final[u];
+            if (start2stmt.count(u)) {
+                stmt2start[start2stmt[u]] = i;
+            }
+        }
+        sub_final = std::move(sub_final2);
+        start2stmt.clear();
+        for (auto &it : stmt2start) {
+            start2stmt[it.second] = it.first;
+        }
+        printf(" of states: %ld", anno.fsa.n());
+    }
+
+    stmt2final[stmt] = sub_final;
+    auto &call_addr = stmt2call_addr[stmt];
+    call_addr.assign(anno.fsa.n(), std::make_pair(-1L, -1L));
+    printf("CallExpr");
+    REP (i, anno.fsa.n()) {
+        if (anno.fsa.has_call(i)) {
+            if (anno.fsa.adj[i].size() != 1 ||
+                    anno.fsa.adj[i][0].first.second - anno.fsa.adj[i][0].first.first > 1) {
+                stmt->module->locfile.locate(stmt->loc,
+                        "state %ld: CallExpr cannot coexist with other transitions", i);
+                for (auto it = anno.fsa.adj[i].begin(); it != anno.fsa.adj[i].end();) {
+                    long from = it->first.first;
+                    long to = it->first.second;
+                    long v = it->second;
+                    while (++it != anno.fsa.adj[i].end() &&
+                            to == it->first.first &&
+                            it->second == v) {
+                        to = it->first.second;
+                    }
+                    printf("    (%ld,%ld)\n", from, to - 1);
+                }
+                return false;
+            }
+            for (auto aa : anno.assoc[i]) {
+                if (has_start(aa.second)) {
+                    if (auto *e = dynamic_cast<CallExpr*>(aa.first)) {
+                        call_addr[i] = {
+                            stmt2start[e->define_stmt],
+                            anno.fsa.adj[i][0].second
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    printf("Removing action/CallExpr labels");
+    REP (i, anno.fsa.n()) {
+        long j = anno.fsa.adj[i].size();
+        while (j && action_label_base < anno.fsa.adj[i][j - 1].first.second) {
+            if (anno.fsa.adj[i][j - 1].first.first < action_label_base) {
+                anno.fsa.adj[i][j - 1].first.second = action_label_base;
+            } else {
+                j--;
+            }
+        }
+        anno.fsa.adj[i].resize(j);
+    }
+
+    //if (1) {
+    //    print_fsa(anno.fsa);
+    //    print_assoc(anno);
+    //}
+    return true;
+}
+
+static void generate_final(const char *name, const std::vector<bool> &final) {
+    fprintf(output,
+            "   //static const long %sfinals[] = {",
+        name
+    );
+    bool first = true;
+    REP (i, final.size()) {
+        if (final[i]) {
+            if (first) {
+                first = false;
+            } else {
+                fprintf(output, ",");
+            }
+            fprintf(output, "%ld", i);
+        }
+    }
+    fprintf(output, "};\n");
+
+    first = true;
+    fprintf(output, "   static const unsigned long %sfinal[] = {", name);
+    for (long j = 0, i = 0; i < final.size(); i += CHAR_BIT * sizeof(long)) {
+        ulong mask = 0;
+        for (; j < final.size() && j < i + CHAR_BIT * sizeof(long); j++) {
+            if (final[i]) {
+                mask |= 1uL << (j - 1);
+            }
+        }
+        if (i) {
+            fprintf(output, ",");
+        }
+        fprintf(output, "%#lx", mask);
+    }
+    fprintf(output, "};\n");
 }
 
 void generate_cxx_export(DefineStmt *stmt) {
-    compile_export(stmt);
     FsaAnno &anno = compiled[stmt];
 
-    fprintf(output, "void hh_%s_init(long &start, std::vector<long> &finals)\n", stmt->lhs.c_str());
+    fprintf(output,
+            "long hh_%s_start = %ld;\n\n\n",
+        stmt->lhs.c_str(), anno.fsa.start);
+    fprintf(output,
+            "bool hh_%s_is_final(const std::vector<long> &ret_stack, long u)\n",
+        stmt->lhs.c_str()
+    );
     fprintf(output, "{\n");
-    ident(output, 1);
-    fprintf(output, "start = %ld;\n", anno.fsa.start);
-    ident(output, 1);
-    fprintf(output, "finals = {");
-    bool first = true;
+    std::vector<bool> final(anno.fsa.n());
     for (long f : anno.fsa.finals)  {
-        if (first) {
-            first = false;
-        } else {
-            fprintf(output, ",");
-        }
-        fprintf(output, "%ld", f);
+        final[f] = true;
     }
-    fprintf(output, "};\n");
-    fprintf(output, "};\n\n");
-
-    printf("Compiling actions\n");
-    compile_actions(stmt);
+    generate_final("", final);
+    generate_final("sub_", stmt2final[stmt]);
+    fprintf(output,
+            "for (long i = ret_stack.size(); i; u = ret_stack[--i])\n"
+            "   if (!(0 <= u && u < %ld && sub_final[u/(CHAR_BIT * sizeof(long))] >> (u%%(CHAR_BIT * sizeof(long))) & 1))\n"
+            "       return false"
+            "   return 0 <= u && u < %ld && final[u/(CHAR_BIT*sizeof(long))] >> (u%%(CHAR_BIT*sizeof(long))) & 1;\n"
+            "};\n\n",
+        anno.fsa.n(),
+        anno.fsa.n()
+    );
+    generate_transitions(stmt);
 }
 
 void generate_graphviz(Module *mod) {
@@ -601,11 +811,9 @@ void generate_graphviz(Module *mod) {
     for (Stmt *x = mod->toplevel; x; x = x->next) {
         if (auto stmt = dynamic_cast<DefineStmt*>(x)) {
             if (stmt->export_) {
-                compile_export(stmt);
                 FsaAnno &anno = compiled[stmt];
                 fprintf(output, "digraph \"%s\" {\n", mod->filename.c_str());
                 bool start_is_final = false;
-
                 ident(output, 1);
                 fprintf(output, "node[shape=doublecircle,color=olivedrab1,style=filled,fontname=Monospace];");
                 for (long f : anno.fsa.finals) {
@@ -648,7 +856,6 @@ void generate_graphviz(Module *mod) {
                         fprintf(output, "%ld -> %ld[label=\"%s\"]\n",
                                 u, lb.first, lb.second.str().c_str());
                     }
-    
                 }
             }
         }
@@ -658,50 +865,85 @@ void generate_graphviz(Module *mod) {
 
 void generate_cxx(Module *mod) {
     fprintf(output, "// Generate by hh, %s\n", mod->filename.c_str());
+    fprintf(output, "#include <limits.h>\n");
     fprintf(output, "#include <vector>\n");
     fputs(
         "#include <algorithm>\n"
+        "#include <cinttypes>\n"
+        "#include <clocale>\n"
+        "#include <codecvt>\n"
+        "#include <cstdint>\n"
+        "#include <cstdio>\n"
+        "#include <cstring>\n"
+        "#include <cwctype>\n"
+        "#include <iostream>\n"
+        "#include <locale>\n"
+        "#include <string>\n"
         "#include <cstdio>\n",
         output
     );
     fprintf(output, "\n");
+    DefineStmt *main_export = NULL;
     for (Stmt *x = mod->toplevel; x; x = x->next) {
         if (auto xx = dynamic_cast<DefineStmt*>(x)) {
             if (xx->export_) {
+                if (!main_export) {
+                    main_export = xx;
+                }
                 generate_cxx_export(xx);
             } else if (auto xx = dynamic_cast<CppStmt*>(x)) {
                 fprintf(output, "%s", xx->code.c_str());
-                fputs(
-                    "\n"
-                    "int main(int argc, char **argv)\n"
-                    "{\n"
-                    "   long u = 0;\n"
-                    "   long len = 0;\n"
-                    "   std::vector<long> finals;\n"
-                    "   hh_main_init(u, finals);\n"
-                    "   if (argc > 1) {\n"
-                    "       for (char *c = argv[1]; *c; c++) {\n"
-                    "           u = hh_main_transit(u, *(unsigned char*)c);\n"
-                    "           if (u < 0) {\n"
-                    "               break;\n"
-                    "           }\n"
-                    "           len++;\n"
-                    "       }\n"
-                    "   } else {\n"
-                    "       int c;\n"
-                    "       while (u >= 0 && (c = getchar()) != EOF) {\n"
-                    "           u = hh_main_transit(u, c;)\n"
-                    "           if (u < 0) {\n"
-                    "               break;\n"
-                    "           }\n"
-                    "           len++;\n"
-                    "       }\n"
-                    "   }\n"
-                    "   printf(\"len: %ld\\nfinal: %s\\n\", len, u, binary_search(finals.begin(), finals.end(), u) ? \"true\", : \"false\");\n"
-                    , output
-                );
             }
         }
+    }
+
+    if (main_export) {
+        fprintf(output,
+                "\n"
+                "int main(int argc, char **argv) {\n"
+                "   setlocale(LC_ALL, \"\");\n"
+                "   std::string utf8;\n"
+                "   const char *p;\n"
+                "   long c, u = hh_%s_start, pref = 0;\n",
+            main_export->lhs.c_str()
+        );
+        fprintf(output, "   std::vector<long> ret_stack;\n");
+        fprintf(output,
+                "   if (argc == 2) utf8 = argv[1];\n"
+                "   else {\n"
+                "       FILE *f = argc == 1 ? stdin : fopen(argv[1]), \"r\");\n"
+                "       while ((c = fgetc(f)) != EOF)\n"
+                "           utf8 += c;\n"
+                "       fclose(f);\n"
+                "   }\n"
+                "   std::u32string utf32 = wstring_convert<codecvt_utf8<char32_t>, char32_t>{}.from_bytes(utf8);\n"
+        );
+
+        fprintf(output,
+                "hh_%s_is_final(ret_stack, u)",
+            main_export->lhs.c_str()
+        );
+
+        fprintf(output,
+                "   for (char32_t c : utf32) {\n"
+                "       u = hh_%s_transit(ret_stack, u, c);\n",
+            main_export->lhs.c_str()
+        );
+
+        fprintf(output,
+                "       if (c > WCHAR_MAX || iswcntrl(c)) printf(\"%%\" PRIuLEAST32 \" \", c);\n"
+                "       else std::cout << wstring_convert<codecvt_utf8<char32_t>, char32_t>{}.to_bytes(c) << ' ';\n"
+                "       hh_%s_is_final(ret_stack, u);\n",
+            main_export->lhs.c_str()
+        );
+        fprintf(output,
+                "   if (u < 0) break;\n"
+                "   pref++;\n"
+                "   }\n"
+                "   printf(\"\\nlen: %%zd\\npref: %%ld\\nstate: %%ld\\nfinal: %%s\\n\", utf32.size(), pref, u, hh_%s_is_final(ret_stack, u) ? \"true\" : \"false\");\n"
+                "}\n",
+            main_export->lhs.c_str()
+        );
     }
 }
 

@@ -10,32 +10,65 @@
 #include <unicode/utf8.h>
 
 using namespace std;
-                                                    // 1.C代码段
-                                                    // lexer: 词法分析器 也叫 扫描器
-                                                    // 自定义领域语言: DSL(领域特定语言)
 
 #define YY_USER_ACTION                              \
     do {                                            \
         yylloc->start   = yyget_extra(yyscanner);   \
         yylloc->end     = yylloc->start + yyleng;   \
-        yyset_extra(yylloc->end, yyscanner);         \
+        yyset_extra(yylloc->end, yyscanner);        \
     } while (0);
 
-static int my_top_state(yyscan_t yyscanner);
 static string tmp_bracket;
 static string tmp_str;
+static long tmp_str_pos;
 static bool semicolon;
+
+static long invalid_escape(YYSTYPE *yylval, const char *text) {
+    yylval->errmsg = aprintf("invalid \\-escape: %s", text);
+    return INVALID_CHARACTER;
+}
+
+static int invalid_escape_octonary(YYSTYPE *yylval, const char *text) {
+    yylval->errmsg = aprintf("invalid number after \\-escape: %s", text);
+    return INVALID_CHARACTER;
+}
+
+static int invalid_escape_x(YYSTYPE *yylval, const char *text) {
+    yylval->errmsg = aprintf("invalid number after \\x-escape: %s", text);
+    return INVALID_CHARACTER;
+}
+
+static int invalid_escape_u(YYSTYPE *yylval, const char *text) {
+    yylval->errmsg = aprintf("invalid number after \\u-escape: %s", text);
+    return INVALID_CHARACTER;
+}
+
+static int invalid_escape_U(YYSTYPE *yylval, const char *text) {
+    yylval->errmsg = aprintf("invalid number after \\U-escape: %s", text);
+    return INVALID_CHARACTER;
+}
 
 static void unexpected_eof(YYSTYPE *yylval, const char* token_end) {
     yylval->errmsg = aprintf("Missing %s at end of file", token_end);
 }
 
 static void unexpected_newline(YYSTYPE *yylval, const char* token_end) {
-    yylval->errmsg = aprintf("Missing %s at end of file", token_end);
+    yylval->errmsg = aprintf("Missing %s at end of line", token_end);
 }
+
+static int unexpected_codepoint(YYSTYPE *yylval) {
+    yylval->errmsg = aprintf("cannot use Unicode codepoints");
+    return INVALID_CHARACTER;
+}
+
+extern "C" int raw_yywrap(yyscan_t yyscanner) {
+    semicolon = false;
+    return 1;
+}
+
 %}
                                                     // 2.Flex(lexer)生成器的行为控制
-%option noyywrap nounput noinput
+%option yywrap noinput
                                                     // 支持可重入
 %option reentrant
 %option extra-type="long"
@@ -48,11 +81,10 @@ static void unexpected_newline(YYSTYPE *yylval, const char* token_end) {
                                                     // 3.状态声明: 多条件扫描状态
                                                     // 单行注释 #
 %x EXPECT_CODE
-%x EXPECT_ACTION
+%x AFTER_ACTION_OP
+%x AFTER_EXPORT
 %x IN_LINE_COMMENT
 %x IN_PAREN
-%x IN_ACTION
-%x IN_ACTION_OP
                                                     // {
 %x IN_BRACE
 %x IN_CODE
@@ -89,38 +121,35 @@ IS  (u|U|l|L)*
                                                     // Flex 从左到右扫描输入，每次尝试(匹配所有规则)找到当前能匹配的最长 token，并且优先选择最先定义的规则。匹配成功后，才把这个 token 返回给 Bison。
 
 %%
-"::" return SEMISEMI;
+"::" return COLONCOLON;
 ".." return DOTDOT;
+"&&" return AMPERAMPER;
 ";" if (semicolon) return '\n';
-
-[-~!&*=+,.?|{}:] { return yytext[0]; }
+[-~!&*=+,.?|{}:] return yytext[0];
 
 "action" yy_push_state(EXPECT_CODE, yyscanner); return ACTION;
 "as" return AS;
 "c++" yy_push_state(EXPECT_CODE, yyscanner); return CPP;
 "epsilon" return EPSILON;
-"export" return EXPORT;
+"export" yy_push_state(AFTER_EXPORT, yyscanner); return EXPORT;
 "import" return IMPORT;
 "intact" return INTACT;
 "semicolon" semicolon = true;
 "nosemicolon" semicolon = false;
 
-{L}({L}|{D})* {                                     // 匹配abc123 存到string里并返回IDENT
+{L}({L}|{D})* {
     yylval->str = new std::string(yytext);
     return IDENT;
 }
-
 [D]+ { yylval->integer = atol(yytext); return INTEGER; }
 
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
 "//" yy_push_state(IN_LINE_COMMENT, yyscanner);
-
 <IN_LINE_COMMENT>{
-    "\n" yy_pop_state(yyscanner);                   // 换行结束注释
+    "\n" yy_pop_state(yyscanner); unput('\n'); yyset_extra(yylloc->end - 1, yyscanner);
     <<EOF>> yy_pop_state(yyscanner);
-    . {}                                            // 其他字符忽略 不生成token
+    . {}
 }
-
 "/*" yy_push_state(IN_COMMENT, yyscanner);
 <IN_COMMENT>{
     "*/" yy_pop_state(yyscanner);
@@ -139,13 +168,13 @@ IS  (u|U|l|L)*
 }
 
 "[" yy_push_state(IN_BRACKET_FIRST, yyscanner); return '[';
-<IN_BRACKET_FIRST>{                                 // 处理 [ 后面的第一个字符
+<IN_BRACKET_FIRST>{
     "^" BEGIN IN_BRACKET; return '^';
     [^-\\\]\n] {
         yy_pop_state(yyscanner);
         yy_push_state(IN_BRACKET, yyscanner);
         yylval->integer = yytext[0];
-        return CHAR;                                // 普通字符
+        return CHAR;
     }
     "-" { yylval->integer = '-'; return CHAR; }
 }
@@ -156,18 +185,17 @@ IS  (u|U|l|L)*
             return ']';
         }
     }
-    [^-\\\]\n] {                                    // 匹配除 ]、换行以外所有字符
+    [^-\\\]\n] {
         yylval->integer = yytext[0];
         return CHAR;
     }
 }
-<IN_BRACKET_FIRST,IN_BRACKET>{                     // 多状态逗号分隔写法：规则同时对 IN_BRACKET_FIRST、IN_BRACKET 生效
-    \\[0-7]{1,3} {
+<IN_BRACKET_FIRST,IN_BRACKET>{
+    \\[0-7]+ {
         BEGIN IN_BRACKET;
         long c = strtol(yytext + 1, NULL, 8);
         if (UCHAR_MAX < c) {
-            yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext + 1);
-            return INVALID_CHARACTER;
+            return invalid_escape_octonary(yylval, yytext);
         }
         yylval->integer = c;
         return CHAR;
@@ -175,8 +203,25 @@ IS  (u|U|l|L)*
     \\x[0-9a-fA-F]+ {                               // 16进制
         long c = strtol(yytext + 2, NULL, 16);
         if (UCHAR_MAX < c) {
-            yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext + 1);
-            return INVALID_CHARACTER;
+            return invalid_escape_x(yylval, yytext);
+        }
+        yylval->integer = c;
+        return CHAR;
+    }
+    \\u[0-9a-fA-F]+ {
+        BEGIN IN_BRACKET;
+        long c = strtol(yytext + 2, NULL, 16);
+        if (UINT16_MAX < c) {
+            return invalid_escape_u(yylval, yytext);
+        }
+        yylval->integer = c;
+        return CHAR;
+    }
+    \\U[0-9a-fA-F]+ {
+        BEGIN IN_BRACKET;
+        long c = strtol(yytext + 2, NULL, 16);
+        if (MAX_CODEPOINT < c) {
+            return invalid_escape_U(yylval, yytext);
         }
         yylval->integer = c;
         return CHAR;
@@ -195,17 +240,24 @@ IS  (u|U|l|L)*
     <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "]");
 }
 
+<AFTER_EXPORT>{
+    "intact" yy_pop_state(yyscanner); return INTACT;
+    {L}({L}|{D})* yy_pop_state(yyscanner); yylval->str = new std::string(yytext); return IDENT;
+    "{" BEGIN IN_CODE; tmp_bracket.clear();
+    [ \t\n]+ {}
+    <<EOF>> yy_pop_state(yyscanner);
+}
 
 <EXPECT_CODE>{
     {L}({L}|{D})* yylval->str = new std::string(yytext); return IDENT;
     "{" BEGIN IN_CODE; tmp_bracket.clear();
-    [ \t]+ {}
-    .|\n {}
+    [ \t\n]+ {}
     <<EOF>> yy_pop_state(yyscanner);
 }
 
-[>@%$] yy_push_state(EXPECT_ACTION, yyscanner); return yytext[0];
-<EXPECT_ACTION>{
+[>@%$] yy_push_state(AFTER_ACTION_OP, yyscanner); return yytext[0];
+<AFTER_ACTION_OP>{
+    -?{D}+ yylval->integer = atol(yytext); return INTEGER;
     {L}({L}|{D})* yy_pop_state(yyscanner); yylval->str = new std::string(yytext); return IDENT;
     "{" BEGIN IN_CODE; tmp_bracket.clear();
     [ \t\n]+ {}
@@ -220,7 +272,6 @@ IS  (u|U|l|L)*
     "}" {
         yy_pop_state(yyscanner);
         if (YY_START == INITIAL || YY_START == IN_PAREN) {
-            BEGIN INITIAL;
             yylval->str = new std::string(tmp_bracket);
             return BRACED_CODE;
         } else {
@@ -231,13 +282,14 @@ IS  (u|U|l|L)*
     <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "}");
 }
 
-' tmp_str.clear(); yy_push_state(IN_Q_STRING, yyscanner);
-"\"" tmp_str.clear(); yy_push_state(IN_QQ_STRING, yyscanner);
+' tmp_str.clear(); tmp_str_pos = yylloc->start; yy_push_state(IN_Q_STRING, yyscanner);
+"\"" tmp_str.clear(); tmp_str_pos = yylloc->start; yy_push_state(IN_QQ_STRING, yyscanner);
 <IN_Q_STRING>{
     ' {
         yy_pop_state(yyscanner);
         if (YY_START == INITIAL || YY_START == IN_PAREN) {
             yylval->str = new std::string(tmp_str);
+            yylloc->start = tmp_str_pos;
             return STRING_LITERAL;
         }
         tmp_bracket += yytext;
@@ -249,7 +301,8 @@ IS  (u|U|l|L)*
     "\"" {
         yy_pop_state(yyscanner);
         if (YY_START == INITIAL || YY_START == IN_PAREN) {
-          yylval->str = new string(tmp_str);
+            yylval->str = new string(tmp_str);
+            yylloc->start = tmp_str_pos;
           return STRING_LITERAL;
         }
         tmp_bracket += yytext;
@@ -258,20 +311,18 @@ IS  (u|U|l|L)*
 }
 
 <IN_Q_STRING,IN_QQ_STRING>{
-    \\[0-7]{1,3} {
-      long c = strtol(yytext+1, NULL, 8);
+    \\[0-7]+ {
+      long c = strtol(yytext + 1, NULL, 8);
       if (UCHAR_MAX < c) {
-        yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-        return INVALID_CHARACTER;
+        return invalid_escape_octonary(yylval, yytext);
       }
       tmp_str.push_back(c);
       tmp_bracket += yytext;
     }
     \\x[0-9a-fA-F]+ {
-      long c = strtol(yytext+2, NULL, 16);
+      long c = strtol(yytext + 2, NULL, 16);
       if (UCHAR_MAX < c) {
-        yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-        return INVALID_CHARACTER;
+        return invalid_escape_x(yylval, yytext);
       }
       tmp_str.push_back(c);
       tmp_bracket += yytext;
@@ -281,8 +332,7 @@ IS  (u|U|l|L)*
         long c = strtol(yytext + 2, NULL, 16);
         long len = 0;
         if (UINT16_MAX < c) {
-            yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-            return INVALID_CHARACTER;
+            return invalid_escape_u(yylval, yytext);
         }
         U8_APPEND_UNSAFE(s, len, c);
         tmp_str.insert(tmp_str.end(), s, s + len);
@@ -292,9 +342,8 @@ IS  (u|U|l|L)*
         char s[4];
         long c = strtol(yytext + 2, NULL, 16);
         long len = 0;
-        if (UINT32_MAX < c) {
-            yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-            return INVALID_CHARACTER;
+        if (MAX_CODEPOINT < c) {
+            return invalid_escape_U(yylval, yytext);
         }
         U8_APPEND_UNSAFE(s, len, c);
         tmp_str.insert(tmp_str.end(), s, s + len);
@@ -308,16 +357,14 @@ IS  (u|U|l|L)*
     \\t tmp_str += '\t'; tmp_bracket += yytext;
     \\v tmp_str += '\v'; tmp_bracket += yytext;
     \\[\n\"\'?\\] tmp_str += yytext[1]; tmp_bracket += yytext;
-    \\. {
-      yylval->errmsg = aprintf("Invalid \\-escape: %s", yytext);
-      return INVALID_CHARACTER;
-    }
+    \\. { return invalid_escape(yylval, yytext); }
     .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
 }
     
 
+\\\n {}
 "\n" if (YY_START == INITIAL && !semicolon) return '\n';
-[ \t]+ {}                                         // 空字符 空动作 直接丢弃 不生成任何 token
+[ \t]+ {}
 . {
     yylval->errmsg = strdup("Invalid character");
     return INVALID_CHARACTER;
@@ -325,8 +372,3 @@ IS  (u|U|l|L)*
 
 %%
 
-static int my_top_state(yyscan_t yyscanner) {
-    struct yyguts_t *yyg = (struct yyguts_t *)yyscanner;
-    return yyg->yy_start_stack_ptr ?
-        yyg->yy_start_stack[yyg->yy_start_stack_ptr - 1] : INITIAL;
-}
