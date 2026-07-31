@@ -84,7 +84,7 @@ extern "C" int raw_yywrap(yyscan_t yyscanner) {
 %x AFTER_ACTION_OP
 %x AFTER_EXPORT
 %x IN_LINE_COMMENT
-%x IN_PAREN
+%s IN_PAREN
                                                     // {
 %x IN_BRACE
 %x IN_CODE
@@ -142,6 +142,7 @@ IS  (u|U|l|L)*
     return IDENT;
 }
 [D]+ { yylval->integer = atol(yytext); return INTEGER; }
+"#define" return PREPROCESS_DEFINE;
 
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
 "//" yy_push_state(IN_LINE_COMMENT, yyscanner);
@@ -251,7 +252,7 @@ IS  (u|U|l|L)*
 <EXPECT_CODE>{
     {L}({L}|{D})* yylval->str = new std::string(yytext); return IDENT;
     "{" BEGIN IN_CODE; tmp_bracket.clear();
-    [ \t\n]+ {}
+    [ \t\n] {}
     <<EOF>> yy_pop_state(yyscanner);
 }
 
@@ -369,6 +370,4 @@ IS  (u|U|l|L)*
     yylval->errmsg = strdup("Invalid character");
     return INVALID_CHARACTER;
 }
-
-%%
 
