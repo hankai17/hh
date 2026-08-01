@@ -18,7 +18,7 @@ static std::unordered_map<DefineStmt*, std::vector<std::pair<long, long>>> stmt2
 static std::unordered_map<DefineStmt*, std::vector<bool>> stmt2final;
 
 void print_assoc(const FsaAnno &anno) {
-    printf("====== Associated Expr of each state\n");
+    printf("====== FSA Associated Expr of each state\n");
     REP (i, anno.fsa.n()) {
         printf("%ld: ", i);
         for (auto aa : anno.assoc[i]) {
@@ -49,7 +49,7 @@ void print_assoc(const FsaAnno &anno) {
 }
 
 void print_fsa(const Fsa &fsa) {
-    printf("====== Automato\n");
+    printf("====== FSA Automaton\n");
     printf("start: %ld\n", fsa.start);
     printf("finals:");
     for (long i : fsa.finals) {
@@ -123,12 +123,12 @@ struct Compiler : Visitor<Expr> {
         }
         path.push(&expr);
 #ifdef DEBUG_COMP
-        printf("expr:%s(%ld-%ld), depth:%ld, stmt:%s\n",
+        printf("stmt: %s, expr:%s(%ld-%ld), depth:%ld\n",
+                expr.stmt->lhs.c_str(),
                 expr.name().c_str(),
                 expr.loc.start,
                 expr.loc.end,
-                expr.depth,
-                expr.stmt->lhs.c_str());
+                expr.depth);
 #endif
     }
 
@@ -284,7 +284,7 @@ void compile(DefineStmt *stmt) {
     anno = std::move(comp.st.top());
     anno.determinize(NULL, NULL);
     anno.minimize(NULL);
-    printf("size(%s::%s) = %ld\n",
+    printf("compile, determinize, minimize done, size(%s::%s) = %ld\n",
             stmt->module->filename.c_str(),
             stmt->lhs.c_str(),
             anno.fsa.n());
@@ -508,6 +508,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     std::unordered_map<long, DefineStmt*> start2stmt;
     std::vector<long> starts;
     std::vector<bool> sub_final;;
+
     std::function<void(DefineStmt*)> allocate = [&] (DefineStmt *stmt) {
         if (stmt2offset.count(stmt))  {
             return;
@@ -515,10 +516,10 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         printf("Allocate %ld to %s\n", allo, stmt->lhs.c_str());
         FsaAnno &anno = compiled[stmt];
         long base = stmt2offset[stmt] = allo;
-        //printf("---------------------->\n");
-        //print_fsa(anno.fsa);
-        //print_assoc(anno);
-        //printf("<----------------------\n");
+        printf("---------------------->\n");
+        print_fsa(anno.fsa);
+        print_assoc(anno);
+        printf("<----------------------\n");
         allo += anno.fsa.n();
         sub_final.resize(allo);
         if (used_as_call.count(stmt)) {
@@ -581,7 +582,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     anno.fsa.adj = std::move(adj);
     anno.assoc = std::move(assoc);
     anno.deterministic = false;
-    printf(" of states: %ld", anno.fsa.n());
+    printf(" of states: %ld\n", anno.fsa.n());
 
     //printf("last---------------------->\n");
     //print_fsa(anno.fsa);
@@ -591,7 +592,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     if (1 && !stmt->intact) {
         printf("Constructing substring grammar\n");
         anno.substring_grammar();
-        printf(" of states: %ld", anno.fsa.n());
+        printf(" of states: %ld\n", anno.fsa.n());
     }
 
     printf("Determinize\n");

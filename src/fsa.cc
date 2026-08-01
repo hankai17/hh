@@ -24,7 +24,7 @@ struct std::hash<std::vector<T>> {
     };
 };
 
-bool Fsa::check() const {
+void Fsa::check() const {
     REP (i, n()) {
         FOR (j, 1, adj[i].size()) {
             assert(adj[i][j - 1].first.second == 0 &&
@@ -375,8 +375,8 @@ Fsa Fsa::determinize(const std::vector<long> *starts,
     std::vector<std::vector<Edge>::const_iterator> its(n());
     std::vector<long> vs {start};
     std::vector<std::pair<long, long>> events;
-    epsilon_closure(vs);                                          // in-out q[0]存储 沿着空边递归寻找可达状态
-    m[vs] = 0;                                                    // 设置状态为 0
+    epsilon_closure(vs);
+    m[vs] = 0;
     std::stack<std::vector<long>> st;
     st.push(std::move(vs));
     if (starts) {

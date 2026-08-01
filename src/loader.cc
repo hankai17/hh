@@ -445,7 +445,7 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
     }
     std::reverse(ALL(topo));
     if (opt_dump_embed) {
-        printf("\n====== Embed\n");
+        printf("\n====== Embed size: %d\n", depended_by.size());
         for (auto stmt : topo) {
             if (cnt[stmt] > 0) {
                 printf("count(%s::%s) = %ld\n",
@@ -472,7 +472,7 @@ long load(const std::string &filename) {
     for (;;) {
         bool done = true;
         for (auto &it : inode2module) {                     // hh2 ModuleImportDef(能接所有语句) 根据main的AST 构建所有文件的AST
-            if (!it.second.status == UNPROCESSED) {
+            if (it.second.status == UNPROCESSED) {
                 done = false;
                 Module &mod = it.second;
                 mod.status = GOOD;
@@ -606,8 +606,9 @@ long load(const std::string &filename) {
 
     printf("\n====== Compiling DefineStmt\n");
     for (auto stmt : topo) {
-        printf("%s->%s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
+        printf("%s--->%s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
         compile(stmt);
+        printf("%s<---%s compiled done\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
     }
 
     output = stdout;

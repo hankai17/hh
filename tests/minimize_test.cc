@@ -62,6 +62,7 @@ int main(int argc, char **argv) {
 }
 */
 
+/*
 const char test[] =
     "4 4 1\n"
     "3  \n"
@@ -96,6 +97,38 @@ int main(int argc, char **argv) {
     Fsa f = a.difference(b, relate);
     print_fsa(f);
     std::cout << "f.n(): " << f.n() << std::endl;
+
+    return 0;
+}
+*/
+
+const char test[] =
+    "4 7 2\n"
+    "2 3\n"
+    "0 -1 0 2\n"
+    "0 97 98 1\n"
+    "1 66 67 1\n"
+    "1 66 67 3\n"
+    "2 -1 0 1\n"
+    "2 97 98 3\n"
+    "3 97 98 2\n";
+
+int main(int argc, char **argv) {
+    if (argc == 1) {
+        char filename[] = "/tmp/XXXXXX";    // 必须这样写
+        int fd = mkstemp(filename);
+        write(fd, test, sizeof(test) - 1);
+        close(fd);
+        freopen(filename, "r", stdin);
+        unlink(filename);
+    }
+
+    auto relate = [&] (long id, const std::vector<long> &xs) {};
+    //Fsa fsa = read_nfa();
+    //Fsa f = fsa.determinize(NULL, relate);
+    Fsa fsa = read_nfa().determinize(NULL, relate);
+    print_fsa(fsa);
+    std::cout << "fsa.n(): " << fsa.n() << std::endl;
 
     return 0;
 }

@@ -12,7 +12,7 @@ struct Fsa {
     std::vector<long> finals;
     std::vector<std::vector<Edge>> adj;
 
-    bool check() const;
+    void check() const;
     long n() const { return adj.size(); }
     bool is_final(long x) const;
     bool has(long u, long a) const;

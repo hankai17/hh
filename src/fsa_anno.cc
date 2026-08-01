@@ -9,6 +9,8 @@
 #include <map>
 #include <unicode/utf8.h>
 
+#define DEBUG_FSA 1
+
 bool operator<(ExprTag x, ExprTag y) {
     return long(x) < long(y);
 }
@@ -44,6 +46,10 @@ FsaAnno FsaAnno::bracket(BracketExpr &expr) {
     r.assoc.resize(2);
     r.add_assoc(expr);
     r.deterministic = true;
+#ifdef DEBUG_FSA
+    print_fsa(r.fsa);
+    print_assoc(r);
+#endif
     return r;
 }
 
@@ -57,6 +63,10 @@ FsaAnno FsaAnno::call(CallExpr &expr) {
     r.assoc.resize(2);
     r.add_assoc(expr);
     r.deterministic = true;
+#ifdef DEBUG_FSA
+    print_fsa(r.fsa);
+    print_assoc(r);
+#endif
     return r;
 }
 
@@ -70,6 +80,10 @@ FsaAnno FsaAnno::collapse(CollapseExpr &expr) {
     r.assoc.resize(2);
     r.add_assoc(expr);
     r.deterministic = true;
+#ifdef DEBUG_FSA
+    print_fsa(r.fsa);
+    print_assoc(r);
+#endif
     return r;
 }
 
@@ -84,6 +98,10 @@ FsaAnno FsaAnno::dot(DotExpr *expr) {
         r.add_assoc(*expr);
     }
     r.deterministic = true;
+#ifdef DEBUG_FSA
+    print_fsa(r.fsa);
+    print_assoc(r);
+#endif
     return r;
 }
 
@@ -112,6 +130,10 @@ FsaAnno FsaAnno::embed(EmbedExpr &expr) {
         }
         r.add_assoc(expr);
         return r;
+#ifdef DEBUG_FSA
+    print_fsa(r.fsa);
+    print_assoc(r);
+#endif
     } else {
         FsaAnno r;
         r.fsa.start = 0;
@@ -121,6 +143,10 @@ FsaAnno FsaAnno::embed(EmbedExpr &expr) {
         r.assoc.resize(2);
         r.add_assoc(expr);
         r.deterministic = true;
+#ifdef DEBUG_FSA
+    print_fsa(r.fsa);
+    print_assoc(r);
+#endif
         return r;
     }
 }
@@ -135,6 +161,10 @@ FsaAnno FsaAnno::epsilon_fsa(EpsilonExpr *expr) {
         r.add_assoc(*expr);
     }
     r.deterministic = true;
+#ifdef DEBUG_FSA
+    print_fsa(r.fsa);
+    print_assoc(r);
+#endif
     return r;
 }
 
@@ -152,6 +182,10 @@ FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     r.assoc.resize(len + 1);
     r.add_assoc(expr);
     r.deterministic = true;
+#ifdef DEBUG_FSA
+    print_fsa(r.fsa);
+    print_assoc(r);
+#endif
     return r;
 }
 
@@ -200,7 +234,7 @@ eg: ident = [a-z] [0-9]*
 */
 
 void FsaAnno::add_assoc(Expr &expr) {
-    if (expr.no_action() &&
+    if (expr.no_action() &&             // 无action 且无intact 且一般表达式
             !expr.stmt->intact &&
             !dynamic_cast<CallExpr*>(&expr) &&
             !dynamic_cast<CollapseExpr*>(&expr)) {
@@ -273,7 +307,7 @@ void FsaAnno::concat(FsaAnno& rhs, ConcatExpr *expr) {
     deterministic = false;
 }
 
-void FsaAnno::determinize(const std::vector<long> *start, std::vector<std::vector<long>> *mapping) {
+void FsaAnno::determinize(const std::vector<long> *starts, std::vector<std::vector<long>> *mapping) {
     if (deterministic)  {
         return;
     }
@@ -289,12 +323,12 @@ void FsaAnno::determinize(const std::vector<long> *start, std::vector<std::vecto
         for (long x : xs) {
             as.insert(as.end(), ALL(assoc[x]));
         }
-        std::sort(ALL(as));
+        sort_assoc(as);
         if (mapping) {
             (*mapping)[id] = xs;
         }
     };
-    fsa = fsa.determinize(start, relate);
+    fsa = fsa.determinize(starts, relate);
     assoc = std::move(new_assoc);
     deterministic = true;
 }

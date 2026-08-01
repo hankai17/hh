@@ -65,18 +65,18 @@ target_include_directories(hh PRIVATE
 )
 
 # ==================== 测试程序 minimize_test ====================
-#add_executable(minimize_test
-#    ${COMMON_SOURCES}
-#    tests/minimize_test.cc
-#    ${CMAKE_CURRENT_BINARY_DIR}/lexer.cc
-#    ${CMAKE_CURRENT_BINARY_DIR}/parser.cc
-#)
-#
-#target_include_directories(minimize_test PRIVATE 
-#    ${SRC_DIR}
-#    ${CMAKE_CURRENT_BINARY_DIR}
-#)
-#
+add_executable(minimize_test
+    ${COMMON_SOURCES}
+    tests/minimize_test.cc
+    ${CMAKE_CURRENT_BINARY_DIR}/lexer.cc
+    ${CMAKE_CURRENT_BINARY_DIR}/parser.cc
+)
+
+target_include_directories(minimize_test PRIVATE 
+    ${SRC_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+
 # ==================== 安装 ====================
-#install(TARGETS hh minimize_test DESTINATION bin)
+install(TARGETS hh minimize_test DESTINATION bin)
 install(TARGETS hh DESTINATION bin)

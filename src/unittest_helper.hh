@@ -9,8 +9,8 @@
 #include <iostream>
 
 static Fsa read_nfa() {
-    long n, m, k, u, v, a;
-    std::cin >> n >> m >> k;                    // n个状态    k个终态
+    long n, m, k, u, v, a, b;
+    std::cin >> n >> m >> k;                    // n个状态  总边数  k个终态
     
     Fsa r;
     r.start = 0;
@@ -21,18 +21,22 @@ static Fsa read_nfa() {
     }
     std::sort(ALL(r.finals));
     while (m--) {
-        std::cin >> u >> a >> v;
+        std::cin >> u >> a >> b >> v;
+        //std::cout << "1u: " << u << ", a:" << a << ", b: " << b << " v:" << v << std::endl;
         if (u < 0 || u >= n) {
             errx(EX_DATAERR, "%ld: 0 <= u < n", u);
         }
         if (a < -1 || a >= 256) {
             errx(EX_DATAERR, "%ld: -1 <= a < 256", a);
         }
+        if (b < 0 || b >= 256) {
+            errx(EX_DATAERR, "%ld: 0 <= b < 256", b);
+        }
         if (v < 0 || v >= n) {
             errx(EX_DATAERR, "%ld: 0 <= v < n", v);
         }
-        //std::cout << "u: " << u << ", a:" << a << " v:" << v << std::endl;
-        r.adj[u].emplace_back(a, v);
+        //std::cout << "2u: " << u << ", a:" << a << ", b: " << b << " v:" << v << std::endl;
+        r.adj[u].emplace_back(std::make_pair(a, b), v);
     }
     assert(std::cin.good());
     REP (i, n) {
@@ -45,9 +49,11 @@ static Fsa read_dfa() {
     Fsa r = read_nfa();
     REP (i, r.n()) {
         if (r.adj[i].size()) {
-            if (r.adj[i][0].first < 0) {
+            /*
+            if (r.adj[i][0].first.first < 0) {
                 errx(EX_DATAERR, "epsilon edge found for %ld", i);
             }
+            */
             REP(j, r.adj[i].size() - 1) {
                 if (r.adj[i][j].first == r.adj[i][j + 1].first) {
                     errx(EX_DATAERR, "duplicate labels %ld found for %ld",
@@ -70,7 +76,7 @@ static void print_fsa(const Fsa& fsa) {
     REP (i, fsa.n()) {
         printf("%ld: ", i);
         for (auto &x : fsa.adj[i]) {
-            printf(" (%ld, %ld)", x.first, x.second);
+            printf(" (%ld,%ld, %ld)", x.first.first, x.first.second, x.second);
         }
         puts("");
     }
