@@ -67,6 +67,7 @@ static Fsa read_dfa() {
 }
 
 static void print_fsa(const Fsa& fsa) {
+    printf("start: %d\n", fsa.start);
     printf("finals: ");
     for (long i : fsa.finals) {
         printf(" %ld", i);

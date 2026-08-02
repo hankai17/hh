@@ -103,6 +103,7 @@ int main(int argc, char **argv) {
 */
 
 const char test[] =
+    /*
     "4 7 2\n"
     "2 3\n"
     "0 -1 0 2\n"
@@ -112,6 +113,24 @@ const char test[] =
     "2 -1 0 1\n"
     "2 97 98 3\n"
     "3 97 98 2\n";
+    */
+    /*
+    "2 4 1\n"           // [ \t\r\n]+
+    "1\n"
+    "0 9 10 1\n"
+    "0 13 14 1\n"
+    "0 32 33 1\n"
+    "1 -1 0 0\n";
+    */
+    "4 7 1\n"           // [ \t\r\n]*
+    "3\n"
+    "0 9 10 1\n"
+    "0 13 14 1\n"
+    "0 32 33 1\n"
+    "1 -1 0 0\n"
+    "1 -1 0 3\n"
+    "2 -1 0 0\n"
+    "2 -1 0 3\n";
 
 int main(int argc, char **argv) {
     if (argc == 1) {
@@ -124,11 +143,13 @@ int main(int argc, char **argv) {
     }
 
     auto relate = [&] (long id, const std::vector<long> &xs) {};
-    //Fsa fsa = read_nfa();
-    //Fsa f = fsa.determinize(NULL, relate);
-    Fsa fsa = read_nfa().determinize(NULL, relate);
+    //Fsa fsa = read_nfa().determinize(NULL, relate);
+    Fsa fsa = read_nfa();
     print_fsa(fsa);
-    std::cout << "fsa.n(): " << fsa.n() << std::endl;
+    fsa.start = 2;
+    Fsa f = fsa.determinize(NULL, relate);
+    print_fsa(f);
+    std::cout << "f.n(): " << f.n() << std::endl;
 
     return 0;
 }

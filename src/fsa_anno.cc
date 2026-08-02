@@ -47,8 +47,10 @@ FsaAnno FsaAnno::bracket(BracketExpr &expr) {
     r.add_assoc(expr);
     r.deterministic = true;
 #ifdef DEBUG_FSA
+    printf("print BracketExpr fsa\n");
     print_fsa(r.fsa);
     print_assoc(r);
+    printf("print BracketExpr fsa done\n");
 #endif
     return r;
 }
@@ -64,8 +66,10 @@ FsaAnno FsaAnno::call(CallExpr &expr) {
     r.add_assoc(expr);
     r.deterministic = true;
 #ifdef DEBUG_FSA
+    printf("print CallExpr fsa\n");
     print_fsa(r.fsa);
     print_assoc(r);
+    printf("print CallExpr fsa done\n");
 #endif
     return r;
 }
@@ -81,8 +85,10 @@ FsaAnno FsaAnno::collapse(CollapseExpr &expr) {
     r.add_assoc(expr);
     r.deterministic = true;
 #ifdef DEBUG_FSA
+    printf("print CollapseExpr fsa\n");
     print_fsa(r.fsa);
     print_assoc(r);
+    printf("print CollapseExpr fsa done\n");
 #endif
     return r;
 }
@@ -99,8 +105,10 @@ FsaAnno FsaAnno::dot(DotExpr *expr) {
     }
     r.deterministic = true;
 #ifdef DEBUG_FSA
+    printf("print DotExpr fsa\n");
     print_fsa(r.fsa);
     print_assoc(r);
+    printf("print DotExpr fsa done\n");
 #endif
     return r;
 }
@@ -129,11 +137,13 @@ FsaAnno FsaAnno::embed(EmbedExpr &expr) {
             }
         }
         r.add_assoc(expr);
-        return r;
 #ifdef DEBUG_FSA
-    print_fsa(r.fsa);
-    print_assoc(r);
+        printf("print embedExpr fsa\n");
+        print_fsa(r.fsa);
+        print_assoc(r);
+        printf("print embedExpr fsa done\n");
 #endif
+        return r;
     } else {
         FsaAnno r;
         r.fsa.start = 0;
@@ -144,8 +154,10 @@ FsaAnno FsaAnno::embed(EmbedExpr &expr) {
         r.add_assoc(expr);
         r.deterministic = true;
 #ifdef DEBUG_FSA
-    print_fsa(r.fsa);
-    print_assoc(r);
+        printf("print embedExpr fsa\n");
+        print_fsa(r.fsa);
+        print_assoc(r);
+        printf("print embedExpr fsa done\n");
 #endif
         return r;
     }
@@ -162,8 +174,10 @@ FsaAnno FsaAnno::epsilon_fsa(EpsilonExpr *expr) {
     }
     r.deterministic = true;
 #ifdef DEBUG_FSA
+    printf("print EpsilonExpr fsa\n");
     print_fsa(r.fsa);
     print_assoc(r);
+    printf("print EpsilonExpr fsa done\n");
 #endif
     return r;
 }
@@ -183,8 +197,10 @@ FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     r.add_assoc(expr);
     r.deterministic = true;
 #ifdef DEBUG_FSA
+    printf("print LiteralExpr fsa\n");
     print_fsa(r.fsa);
     print_assoc(r);
+    printf("print LiteralExpr fsa done\n");
 #endif
     return r;
 }
@@ -305,6 +321,12 @@ void FsaAnno::concat(FsaAnno& rhs, ConcatExpr *expr) {
         add_assoc(*expr);
     }
     deterministic = false;
+#ifdef DEBUG_FSA
+    printf("print concat fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print concat fsa done\n");
+#endif
 }
 
 void FsaAnno::determinize(const std::vector<long> *starts, std::vector<std::vector<long>> *mapping) {
@@ -331,6 +353,12 @@ void FsaAnno::determinize(const std::vector<long> *starts, std::vector<std::vect
     fsa = fsa.determinize(starts, relate);
     assoc = std::move(new_assoc);
     deterministic = true;
+#ifdef DEBUG_FSA
+    printf("print determinize fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print determinize fsa done\n");
+#endif
 }
 
 void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr *expr) {
@@ -366,6 +394,12 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr *expr) {
         add_assoc(*expr);
     }
     deterministic = true;
+#ifdef DEBUG_FSA
+    printf("print difference fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print difference fsa done\n");
+#endif
 }
 
 void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr *expr) {
@@ -414,6 +448,12 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr *expr) {
         add_assoc(*expr);
     }
     deterministic = true;
+#ifdef DEBUG_FSA
+    printf("print intersect fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print intersect fsa done\n");
+#endif
 }
 
 void FsaAnno::minimize(std::vector<std::vector<long>> *mapping) {
@@ -432,6 +472,12 @@ void FsaAnno::minimize(std::vector<std::vector<long>> *mapping) {
     };
     fsa = fsa.hopcroft_minimize(relate);
     assoc = std::move(new_assoc);
+#ifdef DEBUG_FSA
+    printf("print minimize fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print minimize fsa done\n");
+#endif
 }
 
 void FsaAnno::union_(FsaAnno &rhs, UnionExpr *expr) {
@@ -460,6 +506,12 @@ void FsaAnno::union_(FsaAnno &rhs, UnionExpr *expr) {
         add_assoc(*expr);
     }
     deterministic = false;
+#ifdef DEBUG_FSA
+    printf("print union fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print union fsa done\n");
+#endif
 }
 
 void FsaAnno::plus(PlusExpr *expr) {
@@ -470,6 +522,12 @@ void FsaAnno::plus(PlusExpr *expr) {
         add_assoc(*expr);
     }
     deterministic = false;
+#ifdef DEBUG_FSA
+    printf("print plus fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print plus fsa done\n");
+#endif
 }
 
 void FsaAnno::question(MaybeExpr *expr) {
@@ -488,6 +546,12 @@ void FsaAnno::question(MaybeExpr *expr) {
         add_assoc(*expr);
     }
     deterministic = false;
+#ifdef DEBUG_FSA
+    printf("print question fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print question fsa done\n");
+#endif
 }
 
 void FsaAnno::repeat(RepeatExpr &expr) {
@@ -514,6 +578,12 @@ void FsaAnno::repeat(RepeatExpr &expr) {
     }
     r.deterministic = false;
     *this = std::move(r);
+#ifdef DEBUG_FSA
+    printf("print repeate fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print repeate fsa done\n");
+#endif
 }
 
 void FsaAnno::star(ClosureExpr *expr) {
@@ -536,6 +606,12 @@ void FsaAnno::star(ClosureExpr *expr) {
         add_assoc(*expr);
     }
     deterministic = false;
+#ifdef DEBUG_FSA
+    printf("print star fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print star fsa done\n");
+#endif
 }
 
 void FsaAnno::substring_grammar() {
@@ -568,5 +644,11 @@ void FsaAnno::substring_grammar() {
     fsa.finals.assign(1, sink);
     assoc.resize(fsa.n());
     deterministic = false;
+#ifdef DEBUG_FSA
+    printf("print substring fsa\n");
+    print_fsa((*this).fsa);
+    print_assoc(*this);
+    printf("print substring fsa done\n");
+#endif
 }
 

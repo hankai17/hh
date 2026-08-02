@@ -606,9 +606,9 @@ long load(const std::string &filename) {
 
     printf("\n====== Compiling DefineStmt\n");
     for (auto stmt : topo) {
-        printf("%s--->%s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
+        printf("%s======================> %s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
         compile(stmt);
-        printf("%s<---%s compiled done\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
+        printf("%s<====================== %s compiled done\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
     }
 
     output = stdout;
