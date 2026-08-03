@@ -494,6 +494,29 @@ void generate_transitions(DefineStmt *stmt) {
     fprintf(output, "}\n\n");
 }
 
+static void print_adj(std::vector<std::vector<Edge>> &adj) {
+    REP (i, adj.size()) {
+        printf("%ld: ", i);
+        for (auto it = adj[i].begin(); it != adj[i].end();) {
+            long from = it->first.first;
+            long to = it->first.second;
+            long v = it->second;
+            while (++it != adj[i].end() &&
+                    to == it->first.first &&
+                    it->second == v) {
+                to = it->first.second;
+            }
+            if (from == to - 1) {
+                printf(" (%ld,%ld)", from, v);
+            } else {
+                printf(" (%ld-%ld,%ld)", from, to - 1, v);
+            }
+        }
+        puts("");
+    }
+    return;
+}
+
 bool compile_export(DefineStmt *stmt) {                                // 展开所有 & 引用（CollapseExpr） 把被引用的自动机状态合并进来
     printf("Exporting %s\n", stmt->lhs.c_str());                        //  用 ε 转移连接引用点 最终构造一个完整的、不依赖其他定义的状态机
     FsaAnno &anno = compiled[stmt];                                     //  注意这里只修改 anno 不会改变 stmt 语法树
@@ -511,6 +534,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
 
     std::function<void(DefineStmt*)> allocate = [&] (DefineStmt *stmt) {
         if (stmt2offset.count(stmt))  {
+            printf("stmt: %s already in stmt2offset\n", stmt->lhs.c_str());
             return;
         }
         printf("Allocate %ld to %s\n", allo, stmt->lhs.c_str());
@@ -538,16 +562,22 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         }
         assoc.insert(assoc.end(), ALL(anno.assoc));
         FOR (i, base, base + anno.fsa.n()) {
+            printf("==========> begin foreach anno to find collapse/callexpr\n");
             for (auto aa : assoc[i]) {
                 if (has_start(aa.second)) {
                     if (auto e = dynamic_cast<CallExpr *>(aa.first)) {
                         DefineStmt *v = e->define_stmt;
                         allocate(v);
                     } else if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {   // 这个状态有引用转移
+                        printf("found collapse, allocate\n");
                         DefineStmt *v = e->define_stmt;
                         allocate(v);
+        printf("after allocate, print adj---------------------->\n");
+        print_adj(adj);
                         sorted_emplace(adj[i],
                                 epsilon, stmt2offset[v] + compiled[v].fsa.start);
+        printf("after allocate, sorted_emplaced, print adj---------------------->\n");
+        print_adj(adj);
                     }
                 }
             }
@@ -576,6 +606,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
                 }
             }
             adj[i].resize(j);
+            printf("<========== begin foreach End anno to find collapse/callexpr\n");
         }
     };
     allocate(stmt);
@@ -584,10 +615,10 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     anno.deterministic = false;
     printf(" of states: %ld\n", anno.fsa.n());
 
-    //printf("last---------------------->\n");
-    //print_fsa(anno.fsa);
-    //print_assoc(anno);
-    //printf("last<----------------------\n");
+    printf("last allocate done---------------------->\n");
+    print_fsa(anno.fsa);
+    print_assoc(anno);
+    printf("last allocate done<----------------------\n");
 
     if (1 && !stmt->intact) {
         printf("Constructing substring grammar\n");

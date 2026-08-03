@@ -614,7 +614,7 @@ long load(const std::string &filename) {
     output = stdout;
 
     std::unordered_map<DefineStmt*, std::vector<std::pair<long, long>>> stmt2call_addr;
-    printf("Compiling exporting DefineStmt (coalescing referenced CallExpr/CollapseExpr)");
+    printf("Compiling exporting DefineStmt (coalescing referenced CallExpr/CollapseExpr)\n");
     for (Stmt *x = main_module->toplevel; x; x = x->next) {
         if (auto xx = dynamic_cast<DefineStmt*>(x))  {
             if (xx->export_ && !compile_export(xx)) {

@@ -138,10 +138,10 @@ FsaAnno FsaAnno::embed(EmbedExpr &expr) {
         }
         r.add_assoc(expr);
 #ifdef DEBUG_FSA
-        printf("print embedExpr fsa\n");
+        printf("print embedExpr fsa: %s\n", expr.ident.c_str());
         print_fsa(r.fsa);
         print_assoc(r);
-        printf("print embedExpr fsa done\n");
+        printf("print embedExpr fsa: %s done\n", expr.ident.c_str());
 #endif
         return r;
     } else {
@@ -154,10 +154,10 @@ FsaAnno FsaAnno::embed(EmbedExpr &expr) {
         r.add_assoc(expr);
         r.deterministic = true;
 #ifdef DEBUG_FSA
-        printf("print embedExpr fsa\n");
+        printf("print embedExpr fsa: %s\n", expr.ident.c_str());
         print_fsa(r.fsa);
         print_assoc(r);
-        printf("print embedExpr fsa done\n");
+        printf("print embedExpr fsa: %s done\n", expr.ident.c_str());
 #endif
         return r;
     }
