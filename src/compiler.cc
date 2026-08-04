@@ -943,16 +943,16 @@ void generate_cxx(Module *mod) {
         fprintf(output,
                 "   if (argc == 2) utf8 = argv[1];\n"
                 "   else {\n"
-                "       FILE *f = argc == 1 ? stdin : fopen(argv[1]), \"r\");\n"
+                "       FILE *f = argc == 1 ? stdin : fopen(argv[1], \"r\");\n"
                 "       while ((c = fgetc(f)) != EOF)\n"
                 "           utf8 += c;\n"
                 "       fclose(f);\n"
                 "   }\n"
-                "   std::u32string utf32 = wstring_convert<codecvt_utf8<char32_t>, char32_t>{}.from_bytes(utf8);\n"
+                "   std::u32string utf32 = std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t>{}.from_bytes(utf8);\n"
         );
 
         fprintf(output,
-                "hh_%s_is_final(ret_stack, u)",
+                "   hh_%s_is_final(ret_stack, u);\n",
             main_export->lhs.c_str()
         );
 
@@ -964,15 +964,16 @@ void generate_cxx(Module *mod) {
 
         fprintf(output,
                 "       if (c > WCHAR_MAX || iswcntrl(c)) printf(\"%%\" PRIuLEAST32 \" \", c);\n"
-                "       else std::cout << wstring_convert<codecvt_utf8<char32_t>, char32_t>{}.to_bytes(c) << ' ';\n"
+                "       else std::cout << std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t>{}.to_bytes(c) << ' ';\n"
                 "       hh_%s_is_final(ret_stack, u);\n",
             main_export->lhs.c_str()
         );
         fprintf(output,
-                "   if (u < 0) break;\n"
-                "   pref++;\n"
+                "       if (u < 0) break;\n"
+                "       pref++;\n"
                 "   }\n"
-                "   printf(\"\\nlen: %%zd\\npref: %%ld\\nstate: %%ld\\nfinal: %%s\\n\", utf32.size(), pref, u, hh_%s_is_final(ret_stack, u) ? \"true\" : \"false\");\n"
+                "   printf(\"\\nlen: %%zd\\npref: %%ld\\nstate: %%ld\\nfinal: %%s\\n\",\n"
+                "           utf32.size(), pref, u, hh_%s_is_final(ret_stack, u) ? \"true\" : \"false\");\n"
                 "}\n",
             main_export->lhs.c_str()
         );
