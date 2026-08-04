@@ -334,7 +334,7 @@ void FsaAnno::determinize(const std::vector<long> *starts, std::vector<std::vect
         return;
     }
     decltype(assoc) new_assoc;
-    auto relate = [&] (long id, const std::vector<long> &xs) {
+    auto relate = [&] (long id, const std::vector<long> &xs) {  // id为新状态号 xs是该号下老状态集合
         if (id + 1 > new_assoc.size()) {
             new_assoc.resize(id + 1);
             if (mapping) {

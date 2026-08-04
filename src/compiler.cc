@@ -430,7 +430,7 @@ void generate_transitions(DefineStmt *stmt) {
                 while (i != ie && i->first < j->first) {
                     ++i;
                 }
-                if (i != ie || i->first == j->first) {
+                if (i != ie && i->first == j->first) {
                     for (auto action : j->first->transiting) {
                         body.push_back(action);
                     }
@@ -570,19 +570,19 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
                         allocate(v);
                     } else if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {   // 这个状态有引用转移
                         printf("found collapse, allocate\n");
-                        DefineStmt *v = e->define_stmt;
+                        DefineStmt *v = e->define_stmt;                             // v是e这个表达式所引用的句子
                         allocate(v);
         printf("after allocate, print adj---------------------->\n");
         print_adj(adj);
                         sorted_emplace(adj[i],
-                                epsilon, stmt2offset[v] + compiled[v].fsa.start);
+                                epsilon, stmt2offset[v] + compiled[v].fsa.start);   // 指向 所引用的句子的开头
         printf("after allocate, sorted_emplaced, print adj---------------------->\n");
         print_adj(adj);
                     }
                 }
             }
             long j = adj[i].size();
-            while (j && collapse_label_base < adj[i][j - 1].first.second) {
+            while (j && collapse_label_base < adj[i][j - 1].first.second) {         // 遍历这个状态引用的边(包含start inner final类型)
                 long v = adj[i][j-1].second;
                 if (adj[i][j - 1].first.first < collapse_label_base) {
                     adj[i][j - 1].first.second = collapse_label_base;
@@ -590,7 +590,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
                     j--;
                 }
                 CollapseExpr *e;
-                for (auto aa : assoc[v]) {
+                for (auto aa : assoc[v]) {                                          // 引用的引用
                     if (has_final(aa.second) &&
                             (e = dynamic_cast<CollapseExpr*>(aa.first))) {
                         DefineStmt *w = e->define_stmt;
@@ -605,7 +605,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
                     }
                 }
             }
-            adj[i].resize(j);
+            adj[i].resize(j);                                                       // 删除老的引用转移边
             printf("<========== begin foreach End anno to find collapse/callexpr\n");
         }
     };
@@ -620,7 +620,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     print_assoc(anno);
     printf("last allocate done<----------------------\n");
 
-    if (1 && !stmt->intact) {
+    if (0 && !stmt->intact) {
         printf("Constructing substring grammar\n");
         anno.substring_grammar();
         printf(" of states: %ld\n", anno.fsa.n());
@@ -676,7 +676,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     }
     printf(" of states: %ld", anno.fsa.n());
      
-    if (1) {
+    if (0) {
         printf("Keep accessible states\n");
         starts.clear();
         for (auto &it : stmt2start) {
@@ -797,8 +797,8 @@ static void generate_final(const char *name, const std::vector<bool> &final) {
     for (long j = 0, i = 0; i < final.size(); i += CHAR_BIT * sizeof(long)) {
         ulong mask = 0;
         for (; j < final.size() && j < i + CHAR_BIT * sizeof(long); j++) {
-            if (final[i]) {
-                mask |= 1uL << (j - 1);
+            if (final[j]) {
+                mask |= 1uL << (j - i);
             }
         }
         if (i) {
@@ -827,11 +827,11 @@ void generate_cxx_export(DefineStmt *stmt) {
     generate_final("", final);
     generate_final("sub_", stmt2final[stmt]);
     fprintf(output,
-            "for (long i = ret_stack.size(); i; u = ret_stack[--i])\n"
-            "   if (!(0 <= u && u < %ld && sub_final[u/(CHAR_BIT * sizeof(long))] >> (u%%(CHAR_BIT * sizeof(long))) & 1))\n"
-            "       return false"
-            "   return 0 <= u && u < %ld && final[u/(CHAR_BIT*sizeof(long))] >> (u%%(CHAR_BIT*sizeof(long))) & 1;\n"
-            "};\n\n",
+            "   for (auto i = ret_stack.size(); i; u = ret_stack[--i])\n"
+            "      if (!(0 <= u && u < %ld && sub_final[u/(CHAR_BIT * sizeof(long))] >> (u%%(CHAR_BIT * sizeof(long))) & 1))\n"
+            "          return false;\n"
+            "      return 0 <= u && u < %ld && final[u/(CHAR_BIT*sizeof(long))] >> (u%%(CHAR_BIT*sizeof(long))) & 1;\n"
+            "   };\n\n",
         anno.fsa.n(),
         anno.fsa.n()
     );
