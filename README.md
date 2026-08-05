@@ -4,6 +4,10 @@
 - call
 - grammar
 - action
+- macro
+- lca
+- minimize
+- accessiable
 
 ## 参考
 - [jflap](https://www.jflap.org/tutorial/)

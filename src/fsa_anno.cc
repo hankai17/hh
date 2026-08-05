@@ -240,17 +240,8 @@ void FsaAnno::co_accessible(const std::vector<bool> *final, std::vector<long> &m
     assoc.resize(allo);
 }
 
-/*
-四种基本的状态类型(bracket/collapse/dot/literal) 通过复合操作(concat/union/intersect/difference/start/plus/question) 构建自动机
-eg: ident = [a-z] [0-9]*
-    1 [a-z] → bracket()
-    2 [0-9]* → bracket() + star()
-    两个部分 concat() 连接起来
-    最终得到一个复杂的 FsaAnno，内部状态关联了多个 Expr。
-*/
-
 void FsaAnno::add_assoc(Expr &expr) {
-    if (expr.no_action() &&             // 无action 且无intact 且一般表达式
+    if (expr.no_action() &&
             !expr.stmt->intact &&
             !dynamic_cast<CallExpr*>(&expr) &&
             !dynamic_cast<CollapseExpr*>(&expr)) {

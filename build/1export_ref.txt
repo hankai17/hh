@@ -1,8 +1,10 @@
 digit = [9]
 digit1 = [8]
-#number = digit digit   #不支持embed
+
+#number = digit digit   #embed "深拷贝"
 number = !digit !digit
+
 #export attack = !number !digit
-#export attack = !number !number
-export attack = !number !digit1
+export attack = !number !number
+#export attack = !number !digit1
 

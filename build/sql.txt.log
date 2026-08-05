@@ -252,6 +252,11 @@ export select_stmt = select_clause ws from_clause ( ws where_clause )?
 
 
 ------------------------------------------------
+0. stmt = expr + expr ...
+    FsaAnno: 即expr最小单元(bracket/collapse/dot/embed/epsilon/literal)及各种操作(+*| concat等)
+    a. 为何看到的collapse expr的assoc 一般都是两行?
+        collapse最为最小单元 直接默认构造两个(adj/assoc均2个)状态
+        而其作为最小单元 在被concat或concat时 仅是暴力合并adj/assoc而已 所以仍为两行
 
 1. 为何select_stmt中会有assoc?
     expr_atom中有引用 最终expr_atom的assoc中也有
