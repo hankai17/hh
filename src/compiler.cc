@@ -114,7 +114,7 @@ struct Compiler : Visitor<Expr> {
         expr.pre = tick++;
         expr.depth = path.size();
         if (path.size()) {
-            expr.anc.assign(1, path.top());
+            expr.anc.assign(1, path.top());                     // [0]: 父节点 [1]: 父父
             for (long k = 1; 1L << k <= expr.depth; k++) {
                 expr.anc.push_back(expr.anc[k - 1]->anc[k - 1]);
             }
@@ -297,7 +297,7 @@ void generate_transitions(DefineStmt *stmt) {
     auto find_within = [&] (long u) {
         std::vector<std::pair<Expr*, ExprTag>> within;
         Expr *last = NULL;
-        std::sort(ALL(anno.assoc[u]), [](const std::pair<Expr*, ExprTag> &x,
+        std::sort(ALL(anno.assoc[u]), [](const std::pair<Expr*, ExprTag> &x,    // 同一assoc态下 先根据调用栈深度排序
                 const std::pair<Expr*, ExprTag> &y) {
             if (x.first->pre != y.first->pre) {
                 return x.first->pre < y.first->pre;
@@ -305,10 +305,10 @@ void generate_transitions(DefineStmt *stmt) {
             return x.second < y.second;
         });
         for (auto aa : anno.assoc[u]) {
-            Expr *stop = last ? find_lca(last, aa.first) : NULL;
+            Expr *stop = last ? find_lca(last, aa.first) : NULL;                // last只在 assoc当前状态有效 但是奇怪的是 assoc当前状态下 (在minimize时会合并 从而)会有多个不同的clouserExpr
             last = aa.first;
             for (Expr *x = aa.first; x != stop; x = x->anc[0]) {
-                within.emplace_back(x, aa.second);
+                within.emplace_back(x, aa.second);                              // 把自身 <expr与tag> 压入within 也要把expr的父节点 父父节点与tag也压入 within  为何? 
             }
         }
         std::sort(ALL(within));
@@ -383,13 +383,13 @@ void generate_transitions(DefineStmt *stmt) {
             continue;
         }
         ident(output, 1);
-        fprintf(output, "case %ld:\n", u);
+        fprintf(output, "case %ld:\n", u);                  // 源状态: u
         ident(output, 2);
         fprintf(output, "switch (c) {\n");
         std::unordered_map<
-            long,
+            long,                                           // 目标状态: v
             std::pair<
-                    std::vector<std::pair<long, long>>,
+                    std::vector<std::pair<long, long>>,     // 边: <from, to>
                     std::vector<std::pair<Action*, long>>
             >
         > v2case;
@@ -402,7 +402,7 @@ void generate_transitions(DefineStmt *stmt) {
                     it->second == v) {
                 to = it->first.second;
             }
-            v2case[v].first.emplace_back(from, to);
+            v2case[v].first.emplace_back(from, to);         // 构造目标状态
             auto &body = v2case[v].second;
             auto ie = withins[u].end();
             auto je = withins[v].end();
@@ -566,6 +566,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
             for (auto aa : assoc[i]) {
                 if (has_start(aa.second)) {
                     if (auto e = dynamic_cast<CallExpr *>(aa.first)) {
+                        printf("found callexpr, allocate\n");
                         DefineStmt *v = e->define_stmt;
                         allocate(v);
                     } else if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {   // 这个状态有引用转移

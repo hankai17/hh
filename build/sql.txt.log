@@ -289,3 +289,6 @@ export select_stmt = select_clause ws from_clause ( ws where_clause )?
             把本身(即expr)的stmt的assoc 都追加到全局assoc中
             遍历这个assoc 发现有 !select_stmt(id112)(hh1) 跟 !expr(id113)(hh2) 不会做继续处理了 是因为(hh1/hh2)已经在处理select_stmt跟expr了
     所以整体步骤就是: 全都追加到全局里 然后修改引用"偏移"指向正确位置
+
+4. assoc中的状态用作是何?
+
