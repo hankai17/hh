@@ -14,7 +14,12 @@
 #define DEBUG_COMP 1
 
 std::unordered_map<DefineStmt*, FsaAnno> compiled;
-static std::unordered_map<DefineStmt*, std::vector<std::pair<long, long>>> stmt2call_addr;
+
+static std::unordered_map<
+            DefineStmt*,
+            std::vector<std::pair<long, long>>
+        > stmt2call_addr;
+
 static std::unordered_map<DefineStmt*, std::vector<bool>> stmt2final;
 
 void print_assoc(const FsaAnno &anno) {
@@ -474,7 +479,7 @@ void generate_transitions(DefineStmt *stmt) {
         }
         if (sub_final[u]) {
             ident(output, 2);
-            fprintf(output, "default;\n");
+            fprintf(output, "default:\n");
             ident(output, 3);
             fprintf(output,
                     "if (ret_stack.size()) { u = ret_stack.back(); ret_stack.pop_back(); goto again; }\n"
@@ -530,7 +535,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     std::unordered_map<DefineStmt*, long> stmt2start;
     std::unordered_map<long, DefineStmt*> start2stmt;
     std::vector<long> starts;
-    std::vector<bool> sub_final;;
+    std::vector<bool> sub_final;
 
     std::function<void(DefineStmt*)> allocate = [&] (DefineStmt *stmt) {
         if (stmt2offset.count(stmt))  {
@@ -546,8 +551,8 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         printf("<----------------------\n");
         allo += anno.fsa.n();
         sub_final.resize(allo);
-        if (used_as_call.count(stmt)) {
-            stmt2start[stmt] = base + anno.fsa.start;
+        if (used_as_call.count(stmt)) {                                 // 如果这个句子 被用来call
+            stmt2start[stmt] = base + anno.fsa.start;                   // 记录这个句子在新组的状态中的 start
             start2stmt[base + anno.fsa.start] = stmt;
             starts.push_back(base + anno.fsa.start);
             for (long f : anno.fsa.finals) {
@@ -568,7 +573,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
                     if (auto e = dynamic_cast<CallExpr *>(aa.first)) {
                         printf("found callexpr, allocate\n");
                         DefineStmt *v = e->define_stmt;
-                        allocate(v);
+                        allocate(v);                                                // callexpr不会 像引用那样"扩展"
                     } else if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {   // 这个状态有引用转移
                         printf("found collapse, allocate\n");
                         DefineStmt *v = e->define_stmt;                             // v是e这个表达式所引用的句子
@@ -630,9 +635,13 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     printf("Determinize\n");
     std::vector<std::vector<long>> map0;
     anno.determinize(&starts, &map0);
+    printf("last determinize done---------------------->\n");
+    print_fsa(anno.fsa);
+    print_assoc(anno);
+    printf("last determinize done<----------------------\n");
     std::vector<bool> sub_final2(anno.fsa.n());
     REP (i, anno.fsa.n()) {
-        for (long u : map0[i]) {
+        for (long u : map0[i]) {        // i: 新状态  u: 老状态集合
             if (sub_final[u]) {
                 sub_final2[i] = true;
             }
@@ -649,17 +658,17 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     }
     sub_final = std::move(sub_final2);
     start2stmt.clear();
-    for (auto &it : stmt2start) {
+    for (auto &it : stmt2start) {       // 重构determinize后的 stmt2start等
         it.second = ~ it.second;
         start2stmt[it.second] = it.first;
     }
-    printf(" of states: %ld", anno.fsa.n());
+    printf(" of states: %ld\n", anno.fsa.n());
 
     printf("Minimize\n");
     map0.clear();
     anno.minimize(&map0);
     sub_final2.assign(anno.fsa.n(), false);
-    REP (i, anno.fsa.n()) {
+    REP (i, anno.fsa.n()) {             // 重构minimize后的 stmt2start等
         for (long u : map0[i]) {
             if (sub_final[u]) {
                 sub_final2[i] = true;
@@ -675,7 +684,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     for (auto & it : stmt2start) {
         start2stmt[it.second] = it.first;
     }
-    printf(" of states: %ld", anno.fsa.n());
+    printf(" of states: %ld\n", anno.fsa.n());
      
     if (0) {
         printf("Keep accessible states\n");
@@ -698,7 +707,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         for (auto &it : stmt2start) {
             start2stmt[it.second] = it.first;
         }
-        printf(" of states: %ld", anno.fsa.n());
+        printf(" of states: %ld\n", anno.fsa.n());
     
         printf("Keep co-accessible states\n");
         map1.clear();
@@ -716,7 +725,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         for (auto &it : stmt2start) {
             start2stmt[it.second] = it.first;
         }
-        printf(" of states: %ld", anno.fsa.n());
+        printf(" of states: %ld\n", anno.fsa.n());
     }
 
     stmt2final[stmt] = sub_final;

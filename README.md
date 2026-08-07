@@ -8,6 +8,7 @@
 - lca
 - minimize
 - accessiable
+- subfinal
 
 ## 参考
 - [jflap](https://www.jflap.org/tutorial/)
