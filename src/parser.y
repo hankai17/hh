@@ -6,7 +6,9 @@
 
 using std::bitset;
 
-#define YYINITDEPTH 1000
+#define YYINITDEPTH 10000
+#define YYMAXDEPTH  100000
+
 #define YYLTYPE Location
 #define YYLLOC_DEFAULT(Loc, Rhs, N)                 \
     do {                                            \

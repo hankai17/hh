@@ -1,0 +1,6 @@
+digit = [0-9]
+number = digit+
+
+#export main = 'id:' !number
+export main = 'id:' &number
+

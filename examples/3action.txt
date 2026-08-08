@@ -1,0 +1,33 @@
+ident = [a-z]
+digit = [9]
+#number = !digit
+number = [0-9]+
+
+action print_start {
+    printf("action test hello, start!\n");
+}
+
+action print_ident {
+    printf("action test hello, ident\n");
+}
+action print_digit {
+    printf("action test hello, digit\n");
+}
+action print_number {
+    printf("action test hello, number\n");
+}
+
+#export attack = !number !number @ print_digit
+#export attack = number @ print_digit !number @ print_digit
+#export attack = ident @print_ident >print_start digit @ print_digit number @ print_number
+#export attack = ident @print_ident digit @print_digit number @print_number
+
+#export attack = ident @print_ident digit @print_digit number @print_number
+export attack = ident >print_start digit @print_digit number @print_number
+
+#export word = [a-zA-Z]+ @{ printf("enter hello\n"); }
+//>  { printf("enter hello\n"); }
+//%  { printf("leave hello\n"); }
+//$  { printf("transit\n"); 
+//@  { printf("finish hello\n"); }
+

@@ -7,5 +7,9 @@ c++ {
     return "abc";
 }
 
-export hello = '喵' @ { puts("meow"); }
+#import "3.txt"
+import "3.txt" as Tt
+a = !Tt::a3
+b = Tt::b3
+
 

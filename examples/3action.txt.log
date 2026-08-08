@@ -1,0 +1,41 @@
+
+action print_digit {
+    printf("action test hello\n");
+}
+
+#export digit = [0-9]+ > print_digit
+export digit = [0-9]+ @ print_digit
+
+#digit1 = [0-9] > { printf("digit\n"); }
+#export word = [a-zA-Z]+ >{ printf("enter hello\n"); }
+    
+
+#export word = [a-zA-Z]+ @{ printf("enter hello\n"); }
+//>  { printf("enter hello\n"); }
+//%  { printf("leave hello\n"); }
+//$  { printf("transit\n"); 
+//@  { printf("finish hello\n"); }
+
+
+0. parser.y从左到右构造 左边是右边新对象的参数
+    所以打印的时 是从右到左打印的
+    a. Compiler::visit(ClosureExpr &expr)   // 根据parser.y 知ClosureExpr中肯定也有个expr(eg: BracketExpr)
+        visit(*expr.inner);                 // eg: BracketExpr压栈
+        st.top().star(&expr);               // eg: BracketExpr.star(ClosuerExpr)  在bracket里构造克林星 而非在克林星中构造bracket
+        
+
+1. of states: 2CallExprRemoving action/CallExpr labels====== FSA Automaton
+    最后又把 这个状态摘下来了 那放上去作用是何?  防止状态丢失?
+
+
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (48-57,1)
+1:  (48-57,1) (1114112,1)               ------------------------> add_assoc中 添加action到adj的final里
+
+====== FSA Associated Expr of each state
+0:  Embed^(667-673),@1)                 ------------------------> add_assoc中 添加assoc到assoc
+1:  Embed$(667-673),@1)
+                                                ================> action 均加到 adj(1个)/assoc(2个)

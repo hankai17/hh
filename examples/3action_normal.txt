@@ -1,0 +1,17 @@
+action print_digit {
+    printf("action test hello\n");
+}
+
+export digit = [0-9] @ print_digit
+#export digit = [0-9]+ > print_digit
+#export digit = [a-z][0-9]+ @ print_digit
+
+#digit1 = [0-9] > { printf("digit\n"); }
+#export word = [a-zA-Z]+ >{ printf("enter hello\n"); }
+
+#export word = [a-zA-Z]+ @{ printf("enter hello\n"); }
+//>  { printf("enter hello\n"); }
+//%  { printf("leave hello\n"); }
+//$  { printf("transit\n"); 
+//@  { printf("finish hello\n"); }
+

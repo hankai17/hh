@@ -21,4 +21,6 @@
 - [safeline产品](https://bbs.chaitin.cn/topic/9412)
 - [safeline产品](https://help.waf-ce.chaitin.cn/node/01973fc6-e182-7e29-820c-25a640b38856)
 - [safeline产品-xss语义分析](https://www.cnblogs.com/bonelee/p/14516751.html)
+- [safeline在线测试](https://xsschop.chaitin.cn/demo/)
+- [safeline log4j regel语义](https://stack.chaitin.com/techblog/detail/136)
 - [编译原理](https://www.bilibili.com/video/BV1dL4y1H7T8/?spm_id_from=333.788.videopod.episodes&vd_source=3cf62076ca795a09fcb19957a7e330b5&p=12)
