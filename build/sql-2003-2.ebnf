@@ -2024,8 +2024,8 @@ window_frame_exclusion    =
 //7.12 query_specification (p341)
 //Specify a table derived from the result of a table_expression.
 
-#export query_specification    =   SELECT set_quantifier? select_list table_expression
-query_specification    =   SELECT set_quantifier? select_list table_expression
+export query_specification    =   SELECT set_quantifier? select_list table_expression
+#query_specification    =   SELECT set_quantifier? select_list table_expression
 
 select_list    =   asterisk | select_sublist ( comma select_sublist )*
 
@@ -2625,12 +2625,9 @@ schema_element    =
      | collation_definition
      | transliteration_definition
      | assertion_definition
-     //| trigger_definition             // 528
-     //| user_defined_type_definition
      | user_defined_cast_definition
      | user_defined_ordering_definition
      | transform_definition
-     //| schema_routine                   // 346
      | sequence_generator_definition
      | grant_statement
      | role_definition
@@ -3021,9 +3018,9 @@ trigger_column_list    =   column_name_list
 //triggered_action    =
 //         ( FOR EACH ( ROW | STATEMENT ) )?  ( WHEN left_paren search_condition right_paren )?  triggered_SQL_statement
 
-triggered_SQL_statement    =
-         SQL_procedure_statement
-     | BEGIN ATOMIC ( SQL_procedure_statement semicol )* END
+//triggered_SQL_statement    =
+//         SQL_procedure_statement
+//     | BEGIN ATOMIC ( SQL_procedure_statement semicol )* END
 
 old_or_new_values_alias_list    =   old_or_new_values_alias+
 
@@ -3647,14 +3644,14 @@ status_parameter    =   SQLSTATE
 SQL_procedure_statement    =   SQL_executable_statement
 
 SQL_executable_statement    =
-         SQL_schema_statement                   // 10
-     | SQL_data_statement                       // 11
+         SQL_schema_statement
+     | SQL_data_statement
      | SQL_control_statement
      | SQL_transaction_statement
      | SQL_connection_statement
      | SQL_session_statement
      | SQL_diagnostics_statement
-     | SQL_dynamic_statement                    // 70
+     | SQL_dynamic_statement
 
 SQL_schema_statement    =
          !SQL_schema_definition_statement
@@ -3664,7 +3661,6 @@ SQL_schema_definition_statement    =
          schema_definition
      | table_definition
      | view_definition
-     //| SQL_invoked_routine                          // 181
      | grant_statement
      | role_definition
      | domain_definition
@@ -3672,8 +3668,6 @@ SQL_schema_definition_statement    =
      | collation_definition
      | transliteration_definition
      | assertion_definition
-     //| trigger_definition                           // 528
-     //| user_defined_type_definition
      | user_defined_cast_definition
      | user_defined_ordering_definition
      | transform_definition
@@ -3753,13 +3747,11 @@ SQL_session_statement    =
 SQL_diagnostics_statement    =   get_diagnostics_statement
 
 SQL_dynamic_statement    =
-         //system_descriptor_statement            // 22
         prepare_statement
      | deallocate_prepared_statement
      | describe_statement
      | execute_statement
      | execute_immediate_statement
-     //| SQL_dynamic_data_statement               // 16
 
 // 审计
 //SQL_dynamic_data_statement    =
