@@ -2625,12 +2625,12 @@ schema_element    =
      | collation_definition
      | transliteration_definition
      | assertion_definition
-     | trigger_definition
-     | user_defined_type_definition
+     //| trigger_definition             // 528
+     //| user_defined_type_definition
      | user_defined_cast_definition
      | user_defined_ordering_definition
      | transform_definition
-     | schema_routine
+     //| schema_routine                   // 346
      | sequence_generator_definition
      | grant_statement
      | role_definition
@@ -3009,17 +3009,17 @@ drop_assertion_statement    =   DROP ASSERTION constraint_name
 //11.39 trigger_definition (p627)
 //Define triggered SQL-statements.
 
-trigger_definition    =
-         CREATE TRIGGER trigger_name trigger_action_time trigger_event ON table_name ( REFERENCING old_or_new_values_alias_list )?  triggered_action
-
+//trigger_definition    =
+//         CREATE TRIGGER trigger_name trigger_action_time trigger_event ON table_name ( REFERENCING old_or_new_values_alias_list )?  triggered_action
+//
 trigger_action_time    =   BEFORE | AFTER
 
 trigger_event    =   INSERT | DELETE | UPDATE ( OF trigger_column_list)?
 
 trigger_column_list    =   column_name_list
 
-triggered_action    =
-         ( FOR EACH ( ROW | STATEMENT ) )?  ( WHEN left_paren search_condition right_paren )?  triggered_SQL_statement
+//triggered_action    =
+//         ( FOR EACH ( ROW | STATEMENT ) )?  ( WHEN left_paren search_condition right_paren )?  triggered_SQL_statement
 
 triggered_SQL_statement    =
          SQL_procedure_statement
@@ -3049,10 +3049,10 @@ drop_trigger_statement    =   DROP TRIGGER trigger_name
 //11.41 user_defined_type_definition (p632)
 //Define a user-defined type.
 
-user_defined_type_definition    =   CREATE TYPE user_defined_type_body
+//user_defined_type_definition    =   CREATE TYPE user_defined_type_body
 
-user_defined_type_body    =
-         schema_resolved_user_defined_type_name subtype_clause?  ( AS representation )? user_defined_type_option_list?  method_specification_list?
+//user_defined_type_body    =
+//         schema_resolved_user_defined_type_name subtype_clause?  ( AS representation )? user_defined_type_option_list?  method_specification_list?
 
 user_defined_type_option_list    =   user_defined_type_option user_defined_type_option?
 
@@ -3192,19 +3192,19 @@ drop_data_type_statement    =   DROP TYPE schema_resolved_user_defined_type_name
 //11.50 SQL_invoked_routine (p673)
 //Define an SQL-invoked routine.
 
-SQL_invoked_routine    =   schema_routine
+//SQL_invoked_routine    =   schema_routine
 
-schema_routine    =   schema_procedure | schema_function
+//schema_routine    =   schema_procedure | schema_function
 
-schema_procedure    =   CREATE SQL_invoked_procedure
+//schema_procedure    =   CREATE SQL_invoked_procedure
 
-schema_function    =   CREATE SQL_invoked_function
+//schema_function    =   CREATE SQL_invoked_function
 
-SQL_invoked_procedure    =
-         PROCEDURE schema_qualified_routine_name SQL_parameter_declaration_list routine_characteristics routine_body
+//SQL_invoked_procedure    =
+//         PROCEDURE schema_qualified_routine_name SQL_parameter_declaration_list routine_characteristics routine_body
 
-SQL_invoked_function    =
-         ( function_specification | method_specification_designator ) routine_body
+//SQL_invoked_function    =
+//         ( function_specification | method_specification_designator ) routine_body
 
 SQL_parameter_declaration_list    =
          left_paren ( SQL_parameter_declaration ( comma SQL_parameter_declaration )* )? right_paren
@@ -3263,15 +3263,15 @@ result_cast_from_type    =   !data_type  locator_indication?
 
 returns_data_type    =   !data_type  locator_indication?
 
-routine_body    =
-         SQL_routine_spec
-     | external_body_reference
+//routine_body    =
+//         SQL_routine_spec
+//     | external_body_reference
 
-SQL_routine_spec    =    rights_clause? SQL_routine_body
+//SQL_routine_spec    =    rights_clause? SQL_routine_body
 
 rights_clause    =   SQL SECURITY INVOKER | SQL SECURITY DEFINER
 
-SQL_routine_body    =   SQL_procedure_statement
+//SQL_routine_body    =   SQL_procedure_statement
 
 external_body_reference    =
          EXTERNAL ( NAME external_routine_name )?  parameter_style_clause?  transform_group_specification? external_security_clause?
@@ -3647,14 +3647,14 @@ status_parameter    =   SQLSTATE
 SQL_procedure_statement    =   SQL_executable_statement
 
 SQL_executable_statement    =
-         SQL_schema_statement
-     | SQL_data_statement
+         SQL_schema_statement                   // 10
+     | SQL_data_statement                       // 11
      | SQL_control_statement
      | SQL_transaction_statement
      | SQL_connection_statement
      | SQL_session_statement
      | SQL_diagnostics_statement
-     | SQL_dynamic_statement
+     | SQL_dynamic_statement                    // 70
 
 SQL_schema_statement    =
          !SQL_schema_definition_statement
@@ -3664,7 +3664,7 @@ SQL_schema_definition_statement    =
          schema_definition
      | table_definition
      | view_definition
-     | SQL_invoked_routine
+     //| SQL_invoked_routine                          // 181
      | grant_statement
      | role_definition
      | domain_definition
@@ -3672,8 +3672,8 @@ SQL_schema_definition_statement    =
      | collation_definition
      | transliteration_definition
      | assertion_definition
-     | trigger_definition
-     | user_defined_type_definition
+     //| trigger_definition                           // 528
+     //| user_defined_type_definition
      | user_defined_cast_definition
      | user_defined_ordering_definition
      | transform_definition
@@ -3753,27 +3753,28 @@ SQL_session_statement    =
 SQL_diagnostics_statement    =   get_diagnostics_statement
 
 SQL_dynamic_statement    =
-         system_descriptor_statement
-     | prepare_statement
+         //system_descriptor_statement            // 22
+        prepare_statement
      | deallocate_prepared_statement
      | describe_statement
      | execute_statement
      | execute_immediate_statement
-     | SQL_dynamic_data_statement
+     //| SQL_dynamic_data_statement               // 16
 
-SQL_dynamic_data_statement    =
-         allocate_cursor_statement
-     | dynamic_open_statement
-     | dynamic_fetch_statement
-     | dynamic_close_statement
-     | dynamic_delete_statement__positioned
-     | dynamic_update_statement__positioned
+// 审计
+//SQL_dynamic_data_statement    =
+//         allocate_cursor_statement
+//     | dynamic_open_statement
+//     | dynamic_fetch_statement
+//     | dynamic_close_statement
+//     | dynamic_delete_statement__positioned
+//     | dynamic_update_statement__positioned
 
-system_descriptor_statement    =
-         allocate_descriptor_statement
-     | deallocate_descriptor_statement
-     | set_descriptor_statement
-     | get_descriptor_statement
+//system_descriptor_statement    =
+//         allocate_descriptor_statement
+//     | deallocate_descriptor_statement
+//     | set_descriptor_statement                 // 17
+//     | get_descriptor_statement
 
 //13.6 Data type correspondences (p796)
 //Table 16 -- Data type correspondences for C
@@ -4297,7 +4298,7 @@ descriptor_item_name    =
 //19.5 set_descriptor_statement (p937)
 //Set information in an SQL descriptor area.
 
-set_descriptor_statement    =   SET  SQL? DESCRIPTOR descriptor_name set_descriptor_information
+//set_descriptor_statement    =   SET  SQL? DESCRIPTOR descriptor_name set_descriptor_information
 
 set_descriptor_information    =
          set_header_information ( comma set_header_information )*
