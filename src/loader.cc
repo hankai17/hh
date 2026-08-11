@@ -16,6 +16,7 @@
 #include <string.h>
 #include <unordered_map>
 #include <functional>
+#include <time.h>
 
 //#define DEBUG_ON 0
 
@@ -439,6 +440,11 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
         return cycle;
     };
     for (auto &d : depended_by) {
+        if (!d.second.size() &&
+                !d.first->export_ &&
+                !used_as_collapse[d.first].size()) {
+            printf("stmt: %s maybe not used\n", d.first->lhs.c_str());
+        }
         if (!vis[d.first] && dfs(d.first)) {
             n_errors++;
         }
@@ -513,7 +519,7 @@ long load(const std::string &filename) {
         auto it1e = used_as_collapse.end();
         auto it2 = used_as_embed.begin();
         auto it2e = used_as_embed.end();
-        while (it0 != it0e || it1 != it1e || it2 != it2e) {
+        while (it0 != it0e || it1 != it1e || it2 != it2e) { // 确保一个 DefineStmt 只能被以下三种方式之一使用： CallExpr（普通调用） CollapseExpr EmbedExpr
             long k = 0;
             long c = 0;
             DefineStmt *x = NULL;
@@ -582,7 +588,7 @@ long load(const std::string &filename) {
         }
     }
 
-    if (opt_dump_tree) {
+    if (0 && opt_dump_tree) {
         printf("\n====== Tree\n");
         StmtPrinter p;
         for (auto &it : inode2module) {
@@ -606,9 +612,15 @@ long load(const std::string &filename) {
 
     printf("\n====== Compiling DefineStmt\n");
     for (auto stmt : topo) {
+        int s = (int)time(NULL);
         printf("%s======================> %s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
         compile(stmt);
-        printf("%s<====================== %s compiled done\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
+        int e = (int)time(NULL);
+        printf("%s<====================== %s compiled done. elapse %d\n",
+                stmt->module->filename.c_str(),
+                stmt->lhs.c_str(),
+                e - s
+                );
     }
 
     output = stdout;

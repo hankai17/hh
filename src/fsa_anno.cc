@@ -9,7 +9,7 @@
 #include <map>
 #include <unicode/utf8.h>
 
-#define DEBUG_FSA 1
+//#define DEBUG_FSA 1
 
 bool operator<(ExprTag x, ExprTag y) {
     return long(x) < long(y);

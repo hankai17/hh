@@ -9,6 +9,12 @@
 - minimize
 - accessiable
 - subfinal
+- ABC-END bug
+
+##
+- 想只编译想要的 根据拓扑结构 添加标记应该可以实现 但是如果涉及到引用 export时找不到引用 可能失败?
+- 如何删掉 不要的规则:    手动分析语法/耗时分析
+- 如何删掉 不要的无关痛痒的embed: 怎么识别出来?
 
 ## 参考
 - [jflap](https://www.jflap.org/tutorial/)

@@ -11,7 +11,7 @@
 #include <cassert>
 #include <climits>
 
-#define DEBUG_COMP 1
+//#define DEBUG_COMP 1
 
 std::unordered_map<DefineStmt*, FsaAnno> compiled;
 
@@ -23,6 +23,7 @@ static std::unordered_map<
 static std::unordered_map<DefineStmt*, std::vector<bool>> stmt2final;
 
 void print_assoc(const FsaAnno &anno) {
+#ifdef DEBUG_COMP 1
     printf("====== FSA Associated Expr of each state\n");
     REP (i, anno.fsa.n()) {
         printf("%ld: ", i);
@@ -51,9 +52,11 @@ void print_assoc(const FsaAnno &anno) {
         puts("");
     }
     puts("");
+#endif
 }
 
 void print_fsa(const Fsa &fsa) {
+#ifdef DEBUG_COMP 1
     printf("====== FSA Automaton\n");
     printf("start: %ld\n", fsa.start);
     printf("finals:");
@@ -82,6 +85,7 @@ void print_fsa(const Fsa &fsa) {
         puts("");
     }
     puts("");
+#endif
 }
 
 Expr *find_lca(Expr *u, Expr *v) {
@@ -545,10 +549,10 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         printf("Allocate %ld to %s\n", allo, stmt->lhs.c_str());
         FsaAnno &anno = compiled[stmt];
         long base = stmt2offset[stmt] = allo;
-        printf("---------------------->\n");
-        print_fsa(anno.fsa);
-        print_assoc(anno);
-        printf("<----------------------\n");
+        //printf("---------------------->\n");
+        //print_fsa(anno.fsa);
+        //print_assoc(anno);
+        //printf("<----------------------\n");
         allo += anno.fsa.n();
         sub_final.resize(allo);
         if (used_as_call.count(stmt)) {                                 // 如果这个句子 被用来call
@@ -578,12 +582,12 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
                         printf("found collapse, allocate\n");
                         DefineStmt *v = e->define_stmt;                             // v是e这个表达式所引用的句子
                         allocate(v);
-        printf("after allocate, print adj---------------------->\n");
-        print_adj(adj);
+        //printf("after allocate, print adj---------------------->\n");
+        //print_adj(adj);
                         sorted_emplace(adj[i],
                                 epsilon, stmt2offset[v] + compiled[v].fsa.start);   // 指向 所引用的句子的开头
-        printf("after allocate, sorted_emplaced, print adj---------------------->\n");
-        print_adj(adj);
+        //printf("after allocate, sorted_emplaced, print adj---------------------->\n");
+        //print_adj(adj);
                     }
                 }
             }
@@ -621,10 +625,10 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     anno.deterministic = false;
     printf(" of states: %ld\n", anno.fsa.n());
 
-    printf("last allocate done---------------------->\n");
-    print_fsa(anno.fsa);
-    print_assoc(anno);
-    printf("last allocate done<----------------------\n");
+    //printf("last allocate done---------------------->\n");
+    //print_fsa(anno.fsa);
+    //print_assoc(anno);
+    //printf("last allocate done<----------------------\n");
 
     if (0 && !stmt->intact) {
         printf("Constructing substring grammar\n");
@@ -635,10 +639,10 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     printf("Determinize\n");
     std::vector<std::vector<long>> map0;
     anno.determinize(&starts, &map0);
-    printf("last determinize done---------------------->\n");
-    print_fsa(anno.fsa);
-    print_assoc(anno);
-    printf("last determinize done<----------------------\n");
+    //printf("last determinize done---------------------->\n");
+    //print_fsa(anno.fsa);
+    //print_assoc(anno);
+    //printf("last determinize done<----------------------\n");
     std::vector<bool> sub_final2(anno.fsa.n());
     REP (i, anno.fsa.n()) {
         for (long u : map0[i]) {        // i: 新状态  u: 老状态集合

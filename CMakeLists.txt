@@ -8,7 +8,8 @@ set(CMAKE_CXX_EXTENSIONS       OFF)
 
 set(CMAKE_BUILD_TYPE Debug)
 
-add_compile_options(-g -O0 -Wall -Wextra -fsanitize=undefined,address)
+#add_compile_options(-g -O0 -Wall -Wextra -fsanitize=undefined,address)
+add_compile_options(-O3 -Wall -Wextra -fsanitize=undefined,address)
 add_link_options(-fsanitize=undefined,address)
 
 # ==================== 目录设置 ====================
@@ -78,5 +79,5 @@ target_include_directories(minimize_test PRIVATE
 )
 
 # ==================== 安装 ====================
-install(TARGETS hh minimize_test DESTINATION bin)
+#install(TARGETS hh minimize_test DESTINATION bin)
 install(TARGETS hh DESTINATION bin)
