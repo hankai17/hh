@@ -5,6 +5,7 @@
 grep elapse  | sort -k7,7nr | less
 
 ./a.out "SELECT abc,d FROM user WHERE id = (SELECT abc,e FROM a)"
+./a.out "SELECT a  FROM user WHERE id = (SELECT a  FROM a )"
 
 SELECT *
 FROM t
