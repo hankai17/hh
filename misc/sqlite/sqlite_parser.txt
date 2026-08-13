@@ -1,0 +1,448 @@
+import "sqlite_lexer.txt"
+
+sql_stmt_list
+    : sql_stmt? (SCOL sql_stmt?)*
+
+export sql_stmt
+    : !select_stmt
+
+type_name
+    : name+? (
+        OPEN_PAR signed_number CLOSE_PAR
+        | OPEN_PAR signed_number COMMA signed_number CLOSE_PAR
+    )?
+
+signed_number
+    : (PLUS | MINUS)? NUMERIC_LITERAL
+
+cte_table_name
+    : table_name (OPEN_PAR column_name (COMMA column_name)* CLOSE_PAR)?
+
+expr
+    : expr_or
+
+expr_or
+    : expr_and (OR_ expr_and)*
+
+expr_and
+    : expr_not (AND_ expr_not)*
+
+expr_not
+    : NOT_* expr_binary
+
+expr_binary =
+    expr_comparison (
+          compare_operator expr_comparison
+        | is_null_operator
+        | between_operator
+        | in_operator
+        | like_operator
+    )*
+
+compare_operator =
+      "="
+    | "=="
+    | "!="
+    | "<>"
+    | "<"
+    | "<="
+    | ">"
+    | ">="
+
+is_null_operator =
+      IS_ NULL_
+    | IS_ NOT_ NULL_
+
+between_operator =
+    NOT_? BETWEEN_ expr_comparison AND_ expr_comparison
+
+in_operator =
+    NOT_? IN_ "(" expr_list? ")"
+
+expr_list =
+    expr_comparison ("," expr_comparison)*
+
+like_operator =
+    NOT_? LIKE_ expr_comparison
+
+expr_comparison
+    : expr_bitwise ((LT | LT_EQ | GT | GT_EQ) expr_bitwise)*
+
+expr_bitwise
+    : expr_addition ((LT2 | GT2 | AMP | PIPE) expr_addition)*
+
+expr_addition
+    : expr_multiplication ((PLUS | MINUS) expr_multiplication)*
+
+expr_multiplication
+    : expr_string ((STAR | DIV | MOD) expr_string)*
+
+expr_string
+    : expr_collate ((PIPE2 | JPTR | JPTR2) expr_collate)*
+
+expr_collate
+    : expr_unary (COLLATE_ collation_name)*
+
+expr_unary
+    : (MINUS | PLUS | TILDE)* !expr_base
+
+expr_base
+    : literal_value
+    | BIND_PARAMETER
+    | (schema_name DOT)? table_name DOT column_name
+    | column_name_excluding_string
+    | (NOT_? EXISTS_)? OPEN_PAR !select_stmt CLOSE_PAR
+    | raise_function
+    | !expr_recursive
+
+//expr_recursive
+//    : function_name OPEN_PAR (DISTINCT_? expr (COMMA expr)* order_clause? | STAR)? CLOSE_PAR percentile_clause? filter_clause?  over_clause?
+//    | OPEN_PAR expr (COMMA expr)* CLOSE_PAR
+//    | CAST_ OPEN_PAR expr AS_ type_name CLOSE_PAR
+//    | CASE_ expr? (WHEN_ expr THEN_ expr)+ (ELSE_ expr)? END_
+
+////////////////////////////////////////////////////
+expr_recursive = function_call | "(" expr_list ")"
+
+function_call = function_name "(" function_args? ")"
+
+function_args = "*" | expr_list1
+
+expr_list1 = expr ("," expr)*
+
+//cast_expr =
+//    CAST "(" expr AS type_name ")"
+//;
+//case_expr =
+//    CASE expr?
+//    when_clause+
+//    else_clause?
+//    END
+//;
+//when_clause =
+//    WHEN expr THEN expr
+//;
+//else_clause =
+//    ELSE expr
+//;
+////////////////////////////////////////////////////
+
+raise_function
+    : RAISE_ OPEN_PAR (IGNORE_ | (ROLLBACK_ | ABORT_ | FAIL_) COMMA error_message) CLOSE_PAR
+
+literal_value
+    : NUMERIC_LITERAL
+    | STRING_LITERAL
+    | BLOB_LITERAL
+    | NULL_
+    | TRUE_
+    | FALSE_
+    | CURRENT_TIME_
+    | CURRENT_DATE_
+    | CURRENT_TIMESTAMP_
+
+percentile_clause
+    : WITHIN_ GROUP_ OPEN_PAR ORDER_ BY_ expr CLOSE_PAR
+
+select_stmt =
+    select_core
+
+//select_core ( UNION_ select_core)*
+//select_core ( UNION_ select_core)* order_clause?
+
+join_clause
+    : !table_or_subquery
+    
+//!table_or_subquery (join_operator !table_or_subquery join_constraint?)*
+
+select_core =
+    SELECT_ STAR from_clause? where_clause?
+    
+//SELECT_ select_list from_clause? where_clause?
+
+//SELECT_ select_list from_clause?
+//SELECT_ distinct_clause?  select_list from_clause?  where_clause?  group_clause?
+
+distinct_clause = DISTINCT_ | ALL_
+
+select_list =
+    result_column ("," result_column)*
+
+from_clause =
+    FROM_ join_clause
+
+where_clause =
+    WHERE_ expr
+
+//group_clause =
+//    GROUP_ BY_ expr_list2 having_clause?
+
+//having_clause =
+//    HAVING_ expr
+
+//expr_list2 =
+//    expr ("," expr)*
+
+//table_or_subquery
+//    : (schema_name DOT)? table_name (AS_ table_alias | table_alias_excluding_joins)? (
+//        INDEXED_ BY_ index_name
+//        | NOT_ INDEXED_
+//    )?
+//    | (schema_name DOT)? table_function_name OPEN_PAR expr (COMMA expr)* CLOSE_PAR (
+//        AS_? table_alias
+//    )?
+//    | OPEN_PAR join_clause CLOSE_PAR
+//    | OPEN_PAR !select_stmt CLOSE_PAR (AS_? table_alias)?
+
+////////////////////////////////////////////////////
+
+//table_or_subquery = table_name1 table_alias1?  | "(" !select_stmt ")"
+//table_or_subquery =   IDENTIFIER IDENTIFIER?  | "(" !select_stmt ")"
+table_or_subquery =   IDENTIFIER | "(" !select_stmt ")"
+
+table_name1 =  IDENTIFIER
+table_alias1 =  IDENTIFIER
+
+////////////////////////////////////////////////////
+
+result_column
+    : STAR
+    | table_name DOT STAR
+    | expr (AS_? column_alias)?
+
+join_operator
+    : COMMA
+    | NATURAL_? ((LEFT_ | RIGHT_ | FULL_) OUTER_? | INNER_ | CROSS_)? JOIN_
+
+join_constraint
+    : ON_ expr
+    | USING_ OPEN_PAR column_name (COMMA column_name)* CLOSE_PAR
+
+filter_clause
+    : FILTER_ OPEN_PAR WHERE_ expr CLOSE_PAR
+
+over_clause =
+    OVER_ "(" window_body? ")"
+
+window_body =
+      PARTITION_ BY_ expr_list
+    | ORDER_ BY_ expr_list
+    | PARTITION_ BY_ expr_list ORDER_ BY_ expr_list
+
+order_clause
+    : ORDER_ BY_ ordering_term (COMMA ordering_term)*
+
+limit_clause
+    : LIMIT_ expr ((OFFSET_ | COMMA) expr)?
+
+ordering_term
+    : expr (COLLATE_ collation_name)? asc_desc? (NULLS_ (FIRST_ | LAST_))?
+
+asc_desc
+    : ASC_
+    | DESC_
+
+
+
+error_message
+    : expr
+
+filename
+    : expr
+
+
+
+module_argument_inner
+    : ~(OPEN_PAR | CLOSE_PAR | UNEXPECTED_CHAR)
+    | OPEN_PAR !module_argument_inner* CLOSE_PAR
+
+fallback_excluding_conflicts
+    : ABORT_
+    | ACTION_
+    | AFTER_
+    | ALWAYS_
+    | ANALYZE_
+    | ASC_
+    | ATTACH_
+    | BEFORE_
+    | BEGIN_
+    | BY_
+    | CASCADE_
+    | CAST_
+    | COLUMN_
+    | CONFLICT_
+    | CURRENT_
+    | CURRENT_DATE_
+    | CURRENT_TIME_
+    | CURRENT_TIMESTAMP_
+    | DATABASE_
+    | DEFERRED_
+    | DESC_
+    | DETACH_
+    | DO_
+    | EACH_
+    | END_
+    | EXCEPT_
+    | EXCLUDE_
+    | EXCLUSIVE_
+    | EXPLAIN_
+    | FAIL_
+    | FALSE_
+    | FIRST_
+    | FOLLOWING_
+    | FOR_
+    | GENERATED_
+    | GLOB_
+    | GROUPS_
+    | IF_
+    | IGNORE_
+    | IMMEDIATE_
+    | INITIALLY_
+    | INSTEAD_
+    | INTERSECT_
+    | KEY_
+    | LAST_
+    | LIKE_
+    | MATCH_
+    | MATERIALIZED_
+    | NO_
+    | NULLS_
+    | OF_
+    | OFFSET_
+    | OTHERS_
+    | PARTITION_
+    | PLAN_
+    | PRAGMA_
+    | PRECEDING_
+    | QUERY_
+    | RANGE_
+    | RECURSIVE_
+    | REGEXP_
+    | REINDEX_
+    | RELEASE_
+    | RENAME_
+    | REPLACE_
+    | RESTRICT_
+    | ROLLBACK_
+    | ROW_
+    | ROWID_
+    | ROWS_
+    | SAVEPOINT_
+    | STORED_
+    | STRICT_
+    | TEMP_
+    | TEMPORARY_
+    | TIES_
+    | TRIGGER_
+    | TRUE_
+    | UNBOUNDED_
+    | UNION_
+    | VACUUM_
+    | VIEW_
+    | VIRTUAL_
+    | WITH_
+    | WITHIN_
+    | WITHOUT_
+
+join_keyword
+    : CROSS_
+    | FULL_
+    | INDEXED_
+    | INNER_
+    | LEFT_
+    | NATURAL_
+    | OUTER_
+    | RIGHT_
+
+fallback
+    : fallback_excluding_conflicts
+    | join_keyword
+    | RAISE_
+
+name
+    : any_name
+
+function_name
+    : any_name_excluding_raise
+
+schema_name
+    : any_name
+
+table_name
+    : any_name
+
+table_or_index_name
+    : any_name
+
+column_name
+    : any_name
+
+column_name_excluding_string
+    : any_name_excluding_string
+
+column_alias
+    : any_name
+
+collation_name
+    : any_name
+
+foreign_table
+    : any_name
+
+index_name
+    : any_name
+
+trigger_name
+    : any_name
+
+view_name
+    : any_name
+
+module_name
+    : any_name
+
+pragma_name
+    : any_name
+
+savepoint_name
+    : any_name
+
+table_alias
+    : any_name
+
+table_alias_excluding_joins
+    : any_name_excluding_joins
+
+window_name
+    : any_name
+
+alias
+    : any_name
+
+base_window_name
+    : any_name
+
+table_function_name
+    : any_name
+
+any_name_excluding_raise
+    : IDENTIFIER
+    | fallback_excluding_conflicts
+    | join_keyword
+    | STRING_LITERAL
+
+any_name_excluding_joins
+    : IDENTIFIER
+    | fallback_excluding_conflicts
+    | RAISE_
+    | STRING_LITERAL
+
+any_name_excluding_string
+    : IDENTIFIER
+    | fallback
+
+any_name
+    : IDENTIFIER
+    | fallback
+    | STRING_LITERAL
+
