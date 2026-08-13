@@ -21,13 +21,7 @@ void print_help(FILE *fh) {
 }
 
 int main(int argc, char **argv) {
-    long r;
     int opt;
-    FILE *file;
-    int errors;
-    string data;
-    char buf[BUF_SIZE];
-    char *opt_output_filename = NULL;
 
     static struct option long_options[] = {
         {"help",    no_argument,       0,  'h'},

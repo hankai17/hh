@@ -56,18 +56,21 @@ static void unexpected_newline(YYSTYPE *yylval, const char* token_end) {
     yylval->errmsg = aprintf("Missing %s at end of line", token_end);
 }
 
+/*
 static int unexpected_codepoint(YYSTYPE *yylval) {
     yylval->errmsg = aprintf("cannot use Unicode codepoints");
     return INVALID_CHARACTER;
 }
+*/
 
-extern "C" int raw_yywrap(yyscan_t yyscanner) {
+extern "C" int raw_yywrap(yyscan_t) {
     semicolon = false;
     return 1;
 }
 
 %}
                                                     // 2.Flex(lexer)生成器的行为控制
+%option noyy_top_state
 %option yywrap noinput
                                                     // 支持可重入
 %option reentrant
@@ -141,11 +144,15 @@ IS  (u|U|l|L)*
     yylval->str = new std::string(yytext);
     return IDENT;
 }
-[D]+ { yylval->integer = atol(yytext); return INTEGER; }
+
+[0-9]+ { yylval->integer = atol(yytext); return INTEGER; }
+
 "#define" return PREPROCESS_DEFINE;
 
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
+
 "//" yy_push_state(IN_LINE_COMMENT, yyscanner);
+
 <IN_LINE_COMMENT>{
     "\n" yy_pop_state(yyscanner); unput('\n'); yyset_extra(yylloc->end - 1, yyscanner);
     <<EOF>> yy_pop_state(yyscanner);

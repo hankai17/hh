@@ -254,7 +254,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
             error_undefined(expr.loc, expr.qualified, expr.ident) ;
         } else if (r == (Stmt*)1) {
             error_ambiguous(expr.loc, expr.ident);
-        } else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r)) {
+        } else if (dynamic_cast<PreprocessDefineStmt*>(r)) {
             error_misuse_macro("CallExpr", expr.loc, expr.qualified, expr.ident);
         } else if (auto d = dynamic_cast<DefineStmt*>(r)) {
             used_as_call[d].push_back(&expr);               // 跟depended_by 类似
@@ -273,7 +273,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
             error_undefined(expr.loc, expr.qualified, expr.ident) ;
         } else if (r == (Stmt*)1) {
             error_ambiguous(expr.loc, expr.ident);
-        } else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r)) {
+        } else if (dynamic_cast<PreprocessDefineStmt*>(r)) {
             error_misuse_macro("CollapseExpr", expr.loc, expr.qualified, expr.ident);
         } else if (auto d = dynamic_cast<DefineStmt*>(r)) {
             used_as_collapse[d].push_back(&expr);
@@ -368,7 +368,7 @@ Module *load_module(long &n_errors, const std::string &filename) {
         module.erase(t, module.size() - t);
     }
 
-    long r;
+    size_t r;
     char buf[BUF_SIZE];
     std::string data;
 
@@ -410,7 +410,7 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
         }
         if (vis[u] == 1) {  // in stack
             u->module->locfile.locate(u->loc, "'%s': circular embedding", u->lhs.c_str());
-            long i = st.size();
+            size_t i = st.size();
             while (st[i - 1] != u) {
                 i--;
             }
@@ -451,7 +451,7 @@ static std::vector<DefineStmt *> topo_define_stmts(long &n_errors) {
     }
     std::reverse(ALL(topo));
     if (opt_dump_embed) {
-        printf("\n====== Embed size: %d\n", depended_by.size());
+        printf("\n====== Embed size: %ld\n", depended_by.size());
         for (auto stmt : topo) {
             if (cnt[stmt] > 0) {
                 printf("count(%s::%s) = %ld\n",
@@ -520,7 +520,6 @@ long load(const std::string &filename) {
         auto it2 = used_as_embed.begin();
         auto it2e = used_as_embed.end();
         while (it0 != it0e || it1 != it1e || it2 != it2e) { // 确保一个 DefineStmt 只能被以下三种方式之一使用： CallExpr（普通调用） CollapseExpr EmbedExpr
-            long k = 0;
             long c = 0;
             DefineStmt *x = NULL;
             if (it0 != it0e &&
@@ -672,7 +671,6 @@ long load(const std::string &filename) {
             printf("no exporting DefineStmt\n");
         } else {
             printf("Testing %s\n", main_export->lhs.c_str());
-            //repl(main_export);    // TODO hankai
         }
     }
 

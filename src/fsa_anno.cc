@@ -186,7 +186,7 @@ FsaAnno FsaAnno::literal(LiteralExpr &expr) {
     FsaAnno r;
     r.fsa.start = 0;
     long len = 0;
-    for (i32 c = 0, i = 0; i < expr.literal.size(); len++) {
+    for (i32 c = 0, i = 0; i < (i32)expr.literal.size(); len++) {
         U8_NEXT_OR_FFFD(expr.literal.c_str(), i, expr.literal.size(), c);
         r.fsa.adj.emplace_back();
         r.fsa.adj[len].emplace_back(std::make_pair(c, c + 1), len + 1);
@@ -212,6 +212,7 @@ void FsaAnno::accessible(const std::vector<long> *start, std::vector<long> &mapp
             assoc[allo] = std::move(assoc[x]);
         }
         allo++;
+        mapping.push_back(x);
     };
     fsa.accessible(start, relate);
     assoc.resize(allo);
@@ -266,6 +267,7 @@ void FsaAnno::add_assoc(Expr &expr) {
     }
     if (expr.leaving.size() || expr.entering.size() || expr.transiting.size()) {
         for (auto action : expr.transiting) {
+            (void)action;
             REP (i, fsa.n()) {
                 fsa.adj[i].emplace_back(std::make_pair(action_label, action_label + 1), i);
                 action_label++;
@@ -279,7 +281,7 @@ void FsaAnno::add_assoc(Expr &expr) {
     }
 }
 
-void FsaAnno::complement(ComplementExpr *expr) {
+void FsaAnno::complement(ComplementExpr *) {
     if (!deterministic) {
         fsa = fsa.determinize(NULL, [&](long, const std::vector<long>&) {});
     }
@@ -290,7 +292,6 @@ void FsaAnno::complement(ComplementExpr *expr) {
 
 void FsaAnno::concat(FsaAnno& rhs, ConcatExpr *expr) {
     long ln = fsa.n();
-    long rn = rhs.fsa.n();
     for (long f : fsa.finals) {
         emplace_front(fsa.adj[f], epsilon, ln + rhs.fsa.start);
     }
@@ -326,7 +327,7 @@ void FsaAnno::determinize(const std::vector<long> *starts, std::vector<std::vect
     }
     decltype(assoc) new_assoc;
     auto relate = [&] (long id, const std::vector<long> &xs) {  // id为新状态号 xs是该号下老状态集合
-        if (id + 1 > new_assoc.size()) {
+        if (id + 1 > (long)new_assoc.size()) {
             new_assoc.resize(id + 1);
             if (mapping) {
                 mapping->resize(id + 1);
@@ -356,7 +357,7 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr *expr) {
     std::vector<std::vector<long>> rel0;
     decltype(rhs.assoc) new_assoc;
     auto relate0 = [&](long id, const std::vector<long>& xs) {
-        if (id + 1 > rel0.size()) {
+        if (id + 1 > (long)rel0.size()) {
             rel0.resize(id + 1);
         }
         rel0[id] = xs;
@@ -397,13 +398,13 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr *expr) {
     decltype(rhs.assoc) new_assoc;
     std::vector<std::vector<long>> rel0, rel1;
     auto relate0 = [&](long id, const std::vector<long>& xs) {
-        if (id + 1 > rel0.size()) {
+        if (id + 1 > (long)rel0.size()) {
             rel0.resize(id + 1);
         }
         rel0[id] = xs;
     };
     auto relate1 = [&](long id, const std::vector<long>& xs) {
-        if (id + 1 > rel1.size()) {
+        if (id + 1 > (long)rel1.size()) {
             rel1.resize(id + 1);
         }
         rel1[id] = xs;

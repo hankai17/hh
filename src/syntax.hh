@@ -119,7 +119,8 @@ struct InlineAction: Visitable<Action, InlineAction> {
 
 struct Module;
 struct RefAction : Visitable<Action, RefAction> {
-    std::string qualified, ident;
+    std::string qualified;
+    std::string ident;
     ActionStmt *define_stmt;
     RefAction(std::string &qualified, std::string &ident) :
         qualified(std::move(qualified)),
@@ -529,7 +530,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         depth--;
     }
 
-    void visit(EmptyStmt &stmt) override {
+    void visit(EmptyStmt &) override {
         printf("%*s%s\n", 2 * depth, "", "EmptyStmt");
     }
 
@@ -605,7 +606,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         printf("%*s%s\n", 2 * depth, "", "CallExpr");
         printf("%*s", 2 * (depth + 1), "");
         if (expr.qualified.size()) {
-            printf("%s::%s\n", expr.qualified, expr.ident.c_str());
+            printf("%s::%s\n", expr.qualified.c_str(), expr.ident.c_str());
         } else {
             printf("%s\n", expr.ident.c_str());
         }
@@ -623,7 +624,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         printf("%*s%s%s\n", 2 * depth, "", "CollapseExpr: ", info.c_str());
         printf("%*s", 2 * (depth + 1), "");
         if (expr.qualified.size()) {
-            printf("%s.%s\n", expr.qualified, expr.ident.c_str());
+            printf("%s.%s\n", expr.qualified.c_str(), expr.ident.c_str());
         } else {
             printf("%s\n", expr.ident.c_str());
         }
@@ -652,7 +653,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         depth--;
     }
 
-    void visit(DotExpr &expr) override {
+    void visit(DotExpr &) override {
         printf("%*s%s\n", 2 * depth, "", "DotExpr");
     }
 
@@ -660,13 +661,13 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
         printf("%*s%s\n", 2 * depth, "", "EmbedExpr");
         printf("%*s", 2 * (depth + 1), "");
         if (expr.qualified.size()) {
-            printf("%s.%s\n", expr.qualified, expr.ident.c_str());
+            printf("%s.%s\n", expr.qualified.c_str(), expr.ident.c_str());
         } else {
             printf("%s\n", expr.ident.c_str());
         }
     }
 
-    void visit(EpsilonExpr &expr) override {
+    void visit(EpsilonExpr &) override {
         printf("%*s%s\n", 2 * depth, "", "EpsilonExpr");
     }
 
@@ -719,37 +720,37 @@ struct PreorderStmtVisitor : Visitor<Stmt> {
         stmt.accept(*this);
     }
 
-    void visit(ActionStmt &stmt) override {
+    void visit(ActionStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor ActionStmt\n");
 #endif
     }
 
-    void visit(CppStmt &stmt) override {
+    void visit(CppStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor CppStmt\n");
 #endif
     }
 
-    void visit(DefineStmt &stmt) override {
+    void visit(DefineStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor DefineStmt\n");
 #endif
     }
 
-    void visit(EmptyStmt &stmt) override {
+    void visit(EmptyStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor EmptyStmt\n");
 #endif
     }
 
-    void visit(ImportStmt &stmt) override {
+    void visit(ImportStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor ImportStmt\n");
 #endif
     }
 
-    void visit(PreprocessDefineStmt &stmt) override {
+    void visit(PreprocessDefineStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderStmtVisitor PreprocessDefineStmt\n");
 #endif
@@ -758,37 +759,37 @@ struct PreorderStmtVisitor : Visitor<Stmt> {
 
 struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 
-    virtual void pre_action(Action &action) {
+    virtual void pre_action(Action &) {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor pre action\n");
 #endif
     }
 
-    virtual void post_action(Action &action) {
+    virtual void post_action(Action &) {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor post action\n");
 #endif
     }
 
-    virtual void pre_expr(Expr &expr) {
+    virtual void pre_expr(Expr &) {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor pre expr\n");
 #endif
     }
 
-    virtual void post_expr(Expr &expr) {
+    virtual void post_expr(Expr &) {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor post expr\n");
 #endif
     }
 
-    virtual void pre_stmt(Stmt &stmt) {
+    virtual void pre_stmt(Stmt &) {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor pre stmt\n");
 #endif
     }
 
-    virtual void post_stmt(Stmt &stmt) {
+    virtual void post_stmt(Stmt &) {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor post stmt\n");
 #endif
@@ -804,13 +805,13 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         post_action(action);
     }
 
-    void visit(InlineAction &action) override {
+    void visit(InlineAction &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor InlineAction\n");
 #endif
     }
 
-    void visit(RefAction &action) override {
+    void visit(RefAction &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor RefAction\n");
 #endif
@@ -826,7 +827,7 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         post_expr(expr);
     }
 
-    void visit(BracketExpr &expr) override {
+    void visit(BracketExpr &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor BracketExpr\n");
 #endif
@@ -839,7 +840,7 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         visit(*expr.inner);
     }
 
-    void visit(CollapseExpr &expr) override {
+    void visit(CollapseExpr &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor CollapseExpr\n");
 #endif
@@ -868,19 +869,19 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         visit(*expr.rhs);
     }
 
-    void visit(DotExpr &expr) override {
+    void visit(DotExpr &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor DotExpr\n");
 #endif
     }
 
-    void visit(EmbedExpr &expr) override {
+    void visit(EmbedExpr &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor EmbedExpr\n");
 #endif
     }
 
-    void visit(EpsilonExpr &expr) override {
+    void visit(EpsilonExpr &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor EpsilonExpr\n");
 #endif
@@ -894,7 +895,7 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         visit(*expr.rhs);
     }
 
-    void visit(LiteralExpr &expr) override {
+    void visit(LiteralExpr &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor LiteralExpr\n");
 #endif
@@ -940,13 +941,13 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         post_stmt(stmt);
     }
 
-    void visit(ActionStmt &stmt) override {
+    void visit(ActionStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor ActionStmt\n");
 #endif
     }
 
-    void visit(CppStmt &stmt) override {
+    void visit(CppStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor CppStmt\n");
 #endif
@@ -959,19 +960,19 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
         stmt.rhs->accept(*this);
     }
 
-    void visit(EmptyStmt &stmt) override {
+    void visit(EmptyStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor EmptyStmt\n");
 #endif
     }
 
-    void visit(ImportStmt &stmt) override {
+    void visit(ImportStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor ImportStmt\n");
 #endif
     }
 
-    void visit(PreprocessDefineStmt &stmt) override {
+    void visit(PreprocessDefineStmt &) override {
 #ifdef DEBUG_CLS 
         printf("visit PreorderActionExprStmtVisitor PreprocessDefineStmt\n");
 #endif

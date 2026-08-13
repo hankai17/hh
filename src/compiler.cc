@@ -11,7 +11,7 @@
 #include <cassert>
 #include <climits>
 
-//#define DEBUG_COMP 1
+#define DEBUG_COMP 1
 
 std::unordered_map<DefineStmt*, FsaAnno> compiled;
 
@@ -23,7 +23,7 @@ static std::unordered_map<
 static std::unordered_map<DefineStmt*, std::vector<bool>> stmt2final;
 
 void print_assoc(const FsaAnno &anno) {
-#ifdef DEBUG_COMP 1
+#ifdef DEBUG_COMP
     printf("====== FSA Associated Expr of each state\n");
     REP (i, anno.fsa.n()) {
         printf("%ld: ", i);
@@ -56,7 +56,7 @@ void print_assoc(const FsaAnno &anno) {
 }
 
 void print_fsa(const Fsa &fsa) {
-#ifdef DEBUG_COMP 1
+#ifdef DEBUG_COMP
     printf("====== FSA Automaton\n");
     printf("start: %ld\n", fsa.start);
     printf("finals:");
@@ -104,7 +104,7 @@ Expr *find_lca(Expr *u, Expr *v) {
     }
     if (v->depth) {
         for (long k = 63 - __builtin_clzl(v->depth); k >= 0; k--) {
-            if (k < u->anc.size() &&
+            if (k < (long)u->anc.size() &&
                     u->anc[k] != v->anc[k]) {
                 u = u->anc[k];
                 v = v->anc[k];
@@ -469,7 +469,7 @@ void generate_transitions(DefineStmt *stmt) {
             ident(output, 3);
             fprintf(output, "v = %ld;\n", x.first);
             
-            std:;sort(ALL(x.second.second), [] (const std::pair<Action*, long> &a0,
+            std::sort(ALL(x.second.second), [] (const std::pair<Action*, long> &a0,
                     const std::pair<Action*, long> &a1) {
                 return a0.second != a1.second ?
                         a0.second < a1.second : a0.first < a1.first;
@@ -503,6 +503,7 @@ void generate_transitions(DefineStmt *stmt) {
     fprintf(output, "}\n\n");
 }
 
+#ifdef DEBUG_COMP
 static void print_adj(std::vector<std::vector<Edge>> &adj) {
     REP (i, adj.size()) {
         printf("%ld: ", i);
@@ -525,6 +526,7 @@ static void print_adj(std::vector<std::vector<Edge>> &adj) {
     }
     return;
 }
+#endif
 
 bool compile_export(DefineStmt *stmt) {                                // 展开所有 & 引用（CollapseExpr） 把被引用的自动机状态合并进来
     printf("Exporting %s\n", stmt->lhs.c_str());                        //  用 ε 转移连接引用点 最终构造一个完整的、不依赖其他定义的状态机
@@ -582,12 +584,16 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
                         printf("found collapse, allocate\n");
                         DefineStmt *v = e->define_stmt;                             // v是e这个表达式所引用的句子
                         allocate(v);
-        //printf("after allocate, print adj---------------------->\n");
-        //print_adj(adj);
+#ifdef DEBUG_COMP
+        printf("after allocate, print adj---------------------->\n");
+        print_adj(adj);
+#endif
                         sorted_emplace(adj[i],
                                 epsilon, stmt2offset[v] + compiled[v].fsa.start);   // 指向 所引用的句子的开头
-        //printf("after allocate, sorted_emplaced, print adj---------------------->\n");
-        //print_adj(adj);
+#ifdef DEBUG_COMP
+        printf("after allocate, sorted_emplaced, print adj---------------------->\n");
+        print_adj(adj);
+#endif
                     }
                 }
             }
@@ -808,9 +814,9 @@ static void generate_final(const char *name, const std::vector<bool> &final) {
 
     first = true;
     fprintf(output, "   static const unsigned long %sfinal[] = {", name);
-    for (long j = 0, i = 0; i < final.size(); i += CHAR_BIT * sizeof(long)) {
+    for (long j = 0, i = 0; i < (long)final.size(); i += CHAR_BIT * sizeof(long)) {
         ulong mask = 0;
-        for (; j < final.size() && j < i + CHAR_BIT * sizeof(long); j++) {
+        for (; j < (long)final.size() && j < long(i + CHAR_BIT * sizeof(long)); j++) {
             if (final[j]) {
                 mask |= 1uL << (j - i);
             }
@@ -884,7 +890,6 @@ void generate_graphviz(Module *mod) {
 
                 REP (u, anno.fsa.n()) {
                     std::unordered_map<long, std::stringstream> labels;
-                    bool first = true;
                     auto it = anno.fsa.adj[u].begin();
                     for (; it != anno.fsa.adj[u].end(); ++it) {
                         std::stringstream &lb = labels[it->second];

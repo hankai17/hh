@@ -8,14 +8,6 @@
 
 #include "common.hh"
 
-#define SGR0    "\x1b[m"
-#define RED     "\x1b[1;31m"
-#define GREEN   "\x1b[32m"
-#define YELLOW  "\x1b[33m"
-#define BLUE    "\x1b[34m"
-#define MAGENTA "\x1b[35m"
-#define CYAN    "\x1b[36m"
-
 long AB = MAX_CODEPOINT + 1;
 Mode opt_mod = Mode::cxx;
 
@@ -63,20 +55,19 @@ static const char *ENAME[] = {
 #define MAX_ENAME 133
 
 void output_error(bool use_err, const char *format, va_list ap) {
-    char text[BUF_SIZE];
-    char msg[BUF_SIZE];
+    char text[BUF_SIZE/2];
+    char msg[BUF_SIZE/2];
     char buf[BUF_SIZE];
-    vsnprintf(msg, BUF_SIZE, format, ap);
+    vsnprintf(msg, sizeof(msg), format, ap);
     if (use_err) {
-        snprintf(text, BUF_SIZE, "[%s %s] ",
+        snprintf(text, sizeof(text), "[%s %s] ",
             0 < errno && errno < MAX_ENAME ? ENAME[errno] : "?UNKNOWN?",
             strerror(errno));
     } else {
         strcpy(text, "");
     }
-    snprintf(buf, BUF_SIZE, RED "%s%s\n", text, msg);
+    snprintf(buf, BUF_SIZE, "%s%s\n", text, msg);
     fputs(buf, stderr);
-    fputs(SGR0, stderr);
     fflush(stderr);
 }
 
@@ -104,12 +95,16 @@ void err_exit(int exitno, const char *format, ...) {
     int nptrs = backtrace(bt, LEN_OF(buf));
     int i = sprintf(buf, "addr2line -Cfile %s", program_invocation_name);
     int j = 0;
-    while (j < nptrs && i + 30 < sizeof(buf)) {
-        i += sprintf(buf + i, " %#x", bt[j++]);
+    int len = sizeof(buf);
+    while (j < nptrs && i + 30 < (int)sizeof(buf)) {
+        i += snprintf(buf + i, len - i, " %p", bt[j++]);
     }
     strcat(buf, ">&2");
     fputs("\n", stderr);
-    system(buf);
+    int ret = system(buf);
+    if (ret < 0) {
+        fputs("system failed", stderr);
+    }
     //backtrace_sysbols_fd(buf, nptrs, STDERR_FILENO);
     exit(exitno);
 }

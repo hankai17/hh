@@ -77,8 +77,8 @@ int parse(const LocationFile &locfile, Stmt *&res);
         yyerror(&l, res, errors, locfile, lexer, errmsg);   \
     } while (0)
 
-void yyerror(YYLTYPE *loc, Stmt *&res, long& errors,const LocationFile &locfile,
-        yyscan_t *lexer, const char *errmsg) {
+void yyerror(YYLTYPE *loc, Stmt *&, long& errors,const LocationFile &locfile,
+        yyscan_t *, const char *errmsg) {
     errors++;
     locfile.locate(*loc, "%s", errmsg);
 }
@@ -249,7 +249,7 @@ factor:                                             // 基础因子
         U8_NEXT($3->c_str(), j, $3->size(), c1);
         delete $1;
         delete $3;
-        if (i != $1->size() || j != $3->size()) {
+        if (i != (i32)$1->size() || j != (i32)$3->size()) {
             FAIL(yyloc, "endpoints of Unicode range should be of length 1");
             $$ = new DotExpr;
         } else if (c0 > c1) {

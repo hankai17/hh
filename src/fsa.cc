@@ -27,8 +27,8 @@ struct std::hash<std::vector<T>> {
 void Fsa::check() const {
     REP (i, n()) {
         FOR (j, 1, adj[i].size()) {
-            assert(adj[i][j - 1].first.second == 0 &&
-                    adj[i][j].first.second == 0 ||
+            assert((adj[i][j - 1].first.second == 0 &&
+                    adj[i][j].first.second == 0) ||
                     adj[i][j - 1].first.second <= adj[i][j].first.first);
         }
     }
@@ -72,7 +72,7 @@ bool Fsa::has_call_or_collapse(long u) const {
 
 void Fsa::epsilon_closure(std::vector<long> &src) const {
     static std::vector<bool> vis;
-    if (n() > vis.size()) {
+    if (n() > (long)vis.size()) {
         vis.resize(n());
     }
     for (long i : src) {
@@ -393,7 +393,7 @@ Fsa Fsa::determinize(const std::vector<long> *starts,
         std::vector<long> x = std::move(st.top());
         st.pop();
         long id = m[x];
-        if (id + 1 > r.adj.size()) {
+        if (id + 1 > (long)r.adj.size()) {
             r.adj.resize(id + 1);
         }
         relate(id, x);
@@ -501,7 +501,7 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
     long j = 0;
 
     REP (i, n()) {                                      // 遍历n个态
-        if (j < finals.size() && finals[j] == i) {      // 终止态
+        if (j < (long)finals.size() && finals[j] == i) {      // 终止态
             j++;
             if (y < 0) {                                // fy指向首个 终止态
                 fy = i;
@@ -589,8 +589,6 @@ Fsa Fsa::hopcroft_minimize(std::function<void (std::vector<long>&)> relate) {
                 long u = -1;
                 long fv = -1;
                 long v = -1;
-                long cu = 0;
-                long cv = 0;
                 std::vector<long> lb = labels(fy);
                 for (long i = fy;;) {               // ------> 2.2 遍历整个非终止态 eg: 从A态开始遍历
                     if (mark[i]) {                  // ------> 2.2.1 A态是这个a字符所依赖的状态

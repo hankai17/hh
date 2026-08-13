@@ -12,7 +12,7 @@ LocationFile::LocationFile(const std::string &filename,
     long nlines = 1 + count(data.begin(), data.end(), '\n');
     linemap.assign(nlines + 1, 0);
     long line = 1;
-    for (long i = 0; i < data.size(); i++) {
+    for (long i = 0; i < (long)data.size(); i++) {
         if (data[i] == '\n') {
             linemap[line ++] = i + 1;            // 记录每行开始的偏移下标
         }
