@@ -116,9 +116,8 @@ from_clause = FROM_ ws join_clause
 result_column
             : STAR
             | table_name DOT STAR
-            | !expr ws (AS_? ws column_alias)?
+            | !expr (ws (AS_ ws)? column_alias)?
 
-            //| !expr (ws (AS_ ws)? column_alias)?
 export select_stmt = SELECT_ ws result_column (ws from_clause)? ( ws where_clause )?
 
 /////////////////////////////////////////////////////////////////////////////////////////
