@@ -46,20 +46,20 @@ expr_base
             | BIND_PARAMETER
             | (schema_name DOT)? table_name DOT column_name
             | column_name_excluding_string
-            | (NOT_? EXISTS_)? OPEN_PAR !select_stmt CLOSE_PAR
+            | (NOT_? EXISTS_)? OPEN_PAR opt_ws !select_stmt opt_ws CLOSE_PAR
             | !expr_recursive
 
 expr_unary = (MINUS | PLUS | TILDE)* opt_ws !expr_base
 
-expr_string = expr_unary ((PIPE2 | JPTR | JPTR2) expr_unary)*
+expr_string = expr_unary (opt_ws (PIPE2 | JPTR | JPTR2) opt_ws expr_unary)*
 
-expr_multiplication = expr_string ((STAR | DIV | MOD) expr_string)*
+expr_multiplication = expr_string (opt_ws (STAR | DIV | MOD) opt_ws expr_string)*
 
-expr_addition = expr_multiplication ((PLUS | MINUS) expr_multiplication)*
+expr_addition = expr_multiplication (opt_ws (PLUS | MINUS) opt_ws expr_multiplication)*
 
-expr_bitwise = expr_addition ((LT2 | GT2 | AMP | PIPE) expr_addition)*
+expr_bitwise = expr_addition (opt_ws (LT2 | GT2 | AMP | PIPE) opt_ws expr_addition)*
 
-expr_comparison = expr_bitwise ((LT | LT_EQ | GT | GT_EQ) expr_bitwise)*
+expr_comparison = expr_bitwise (opt_ws (LT | LT_EQ | GT | GT_EQ) opt_ws expr_bitwise)*
 
 expr_list = expr_comparison (opt_ws ',' opt_ws expr_comparison)*
 
@@ -68,9 +68,9 @@ expr_recursive = OPEN_PAR opt_ws expr_list opt_ws CLOSE_PAR
 
 expr = expr_or
 
-expr_or = expr_and (OR_ opt_ws expr_and)*
+expr_or = expr_and (OR_ ws expr_and)*
 
-expr_and = expr_not (AND_ opt_ws expr_not)*
+expr_and = expr_not (AND_ ws expr_not)*
 
 expr_not = (NOT_ ws)* expr_binary
 
@@ -93,6 +93,8 @@ in_operator = (NOT_ ws)? IN_ ws '(' opt_ws expr_list? opt_ws ')'
 
 like_operator = (NOT_ ws)? LIKE_ ws expr_comparison
 
+//expr_binary = expr_comparison (opt_ws (compare_operator expr_comparison | is_null_operator | between_operator | in_operator | like_operator) opt_ws)*
+
 expr_binary 
             : expr_comparison ws (
             compare_operator expr_comparison
@@ -109,16 +111,15 @@ table_or_subquery = IDENTIFIER | ('(' opt_ws !select_stmt opt_ws ')')
 
 join_clause = table_or_subquery
 
-from_clause   = FROM_ ws join_clause        // ident
+from_clause = FROM_ ws join_clause
 
 result_column
             : STAR
             | table_name DOT STAR
+            | !expr ws (AS_? ws column_alias)?
 
-
-//            | expr ws (AS_? ws column_alias)?
-
-export select_stmt = SELECT_ ws result_column ws from_clause? ( ws where_clause )?
+            //| !expr (ws (AS_ ws)? column_alias)?
+export select_stmt = SELECT_ ws result_column (ws from_clause)? ( ws where_clause )?
 
 /////////////////////////////////////////////////////////////////////////////////////////
 

@@ -4,6 +4,8 @@
 ./a.out "SELECT*FROMA"
 grep elapse  | sort -k7,7nr | less
 
+./a.out "SELECT abc,d FROM user WHERE id = (SELECT abc,e FROM a)"
+
 SELECT *
 FROM t
 WHERE
