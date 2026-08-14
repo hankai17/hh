@@ -371,20 +371,20 @@ void generate_transitions(DefineStmt *stmt) {
     }
     fprintf(output,
             "{\n"
-            "   long v = -1;\n"
+            "  long v = -1;\n"
             "again:\n"
-            "   switch (u) {\n"
+            "  switch (u) {\n"
     );
     REP (u, anno.fsa.n()) {
         if (call_addr[u].first >= 0) {
             fprintf(output,
-                    "   case %ld:\n"
-                    "       u = %ld;\n",
+                    "  case %ld:\n"
+                    "    u = %ld;\n",
             u, call_addr[u].first);
 
             fprintf(output,
-                    "   ret_stack.push_back(%ld);\n"
-                    "   goto again;\n",
+                    "    ret_stack.push_back(%ld);\n"
+                    "    goto again;\n",
             call_addr[u].second);
             continue;
         }
@@ -396,12 +396,14 @@ void generate_transitions(DefineStmt *stmt) {
         ident(output, 2);
         fprintf(output, "switch (c) {\n");
         std::unordered_map<
-            long,                                           // 目标状态: v
+            long,                                           // 目标态v
             std::pair<
-                    std::vector<std::pair<long, long>>,     // 边: <from, to>
+                    std::vector<std::pair<long, long>>,     // 到达目标态 所有边集合: <from, to>
                     std::vector<std::pair<Action*, long>>
             >
-        > v2case;
+        > v2case;                                           // 即合并当前态u下的 所有相同的目标态v 及(当前态u)到目标态v的所有边(pair.first) 及 (当前态u)到目标态v的所有action(pair.second)
+                                                            //  eg: 3(u) --a,c--> 5(v)  // <a,b> <c,d>存放到 pair.first中
+                                                            //      从3态到5态的 涉及到的action变化 放到 pair.second中 eg: action1消失 action2出现 则action1/2都方到pair.second里
         for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end();) {
             long from = it->first.first;
             long to = it->first.second;
@@ -411,8 +413,8 @@ void generate_transitions(DefineStmt *stmt) {
                     it->second == v) {
                 to = it->first.second;
             }
-            v2case[v].first.emplace_back(from, to);         // 构造目标状态
-            auto &body = v2case[v].second;
+            v2case[v].first.emplace_back(from, to);         // <long, long>
+            auto &body = v2case[v].second;                  // <Action*, long>
             auto ie = withins[u].end();
             auto je = withins[v].end();
             for (auto i = withins[u].begin(), j = withins[v].begin(); i != ie; ++i) {
@@ -458,7 +460,7 @@ void generate_transitions(DefineStmt *stmt) {
             }
         }
         for (auto & x : v2case) {
-            for (auto &y : x.second.first) {
+            for (auto &y : x.second.first) {                    // 边集合
                 ident(output, 2);
                 if (y.first == y.second - 1) {
                     fprintf(output, "case %ld:\n", y.first);
@@ -467,7 +469,7 @@ void generate_transitions(DefineStmt *stmt) {
                 }
             }
             ident(output, 3);
-            fprintf(output, "v = %ld;\n", x.first);
+            fprintf(output, "v = %ld;\n", x.first);             // 目标态v
             
             std::sort(ALL(x.second.second), [] (const std::pair<Action*, long> &a0,
                     const std::pair<Action*, long> &a1) {
@@ -551,10 +553,12 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         printf("Allocate %ld to %s\n", allo, stmt->lhs.c_str());
         FsaAnno &anno = compiled[stmt];
         long base = stmt2offset[stmt] = allo;
-        //printf("---------------------->\n");
-        //print_fsa(anno.fsa);
-        //print_assoc(anno);
-        //printf("<----------------------\n");
+#ifdef DEBUG_COMP
+        printf("---------------------->\n");
+        print_fsa(anno.fsa);
+        print_assoc(anno);
+        printf("<----------------------\n");
+#endif
         allo += anno.fsa.n();
         sub_final.resize(allo);
         if (used_as_call.count(stmt)) {                                 // 如果这个句子 被用来call
@@ -631,10 +635,12 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     anno.deterministic = false;
     printf(" of states: %ld\n", anno.fsa.n());
 
-    //printf("last allocate done---------------------->\n");
-    //print_fsa(anno.fsa);
-    //print_assoc(anno);
-    //printf("last allocate done<----------------------\n");
+#ifdef DEBUG_COMP
+    printf("last allocate done---------------------->\n");
+    print_fsa(anno.fsa);
+    print_assoc(anno);
+    printf("last allocate done<----------------------\n");
+#endif
 
     if (0 && !stmt->intact) {
         printf("Constructing substring grammar\n");
@@ -645,10 +651,12 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     printf("Determinize\n");
     std::vector<std::vector<long>> map0;
     anno.determinize(&starts, &map0);
-    //printf("last determinize done---------------------->\n");
-    //print_fsa(anno.fsa);
-    //print_assoc(anno);
-    //printf("last determinize done<----------------------\n");
+#ifdef DEBUG_COMP
+    printf("last determinize done---------------------->\n");
+    print_fsa(anno.fsa);
+    print_assoc(anno);
+    printf("last determinize done<----------------------\n");
+#endif
     std::vector<bool> sub_final2(anno.fsa.n());
     REP (i, anno.fsa.n()) {
         for (long u : map0[i]) {        // i: 新状态  u: 老状态集合
@@ -742,7 +750,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     auto &call_addr = stmt2call_addr[stmt];
     call_addr.assign(anno.fsa.n(), std::make_pair(-1L, -1L));
     printf("CallExpr");
-    REP (i, anno.fsa.n()) {
+    REP (i, anno.fsa.n()) {                                             // 构造这条含有call表达式的语句 的引用<1, 5>
         if (anno.fsa.has_call(i)) {
             if (anno.fsa.adj[i].size() != 1 ||
                     anno.fsa.adj[i][0].first.second - anno.fsa.adj[i][0].first.first > 1) {

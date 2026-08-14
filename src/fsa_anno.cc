@@ -9,7 +9,7 @@
 #include <map>
 #include <unicode/utf8.h>
 
-//#define DEBUG_FSA 1
+#define DEBUG_FSA 1
 
 bool operator<(ExprTag x, ExprTag y) {
     return long(x) < long(y);
@@ -116,6 +116,12 @@ FsaAnno FsaAnno::dot(DotExpr *expr) {
 FsaAnno FsaAnno::embed(EmbedExpr &expr) {
     if (expr.define_stmt) {
         FsaAnno r = compiled[expr.define_stmt];
+#ifdef DEBUG_FSA
+        printf("print embedExpr ori fsa: %s\n", expr.ident.c_str());
+        print_fsa(r.fsa);
+        print_assoc(r);
+        printf("print embedExpr ori fsa: %s done\n", expr.ident.c_str());
+#endif
         REP (i, r.fsa.n()) {
             auto it = upper_bound(ALL(r.fsa.adj[i]),
                     std::make_pair(

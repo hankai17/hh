@@ -1,0 +1,363 @@
+Processing import & def
+
+Processing use
+
+====== Module
+filename: call.t
+qualified imports:
+unqualified imports:
+defined action:
+defined:
+    main
+    number
+
+====== Tree
+filename: call.t
+DefineStmt
+  number
+  PlusExpr
+    BracketExpr: depth: -4702111234474983746, pre: -4702111234474983746, post: -4702111234474983746, stmt_ptr:0x50c000000040
+      (48,58)
+DefineStmt export
+  main
+  ConcatExpr
+    LiteralExpr
+      id:
+    CollapseExpr: depth: -4702111234474983746, pre: -4702111234474983746, post: -4702111234474983746, stmt_ptr:0x50c000000100
+      number
+EmptyStmt
+
+====== Topological sorting
+
+====== Embed size: 2
+count(call.t::main) = 1
+
+====== Compiling DefineStmt
+call.t======================> number
+stmt: number, expr:Plus(9-15), depth:0
+Compiler visit PlusExpr
+stmt: number, expr:Bracket(9-14), depth:1
+Compiler visit BracketExpr
+print BracketExpr fsa
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (48-57,1)
+1: 
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+
+print BracketExpr fsa done
+print plus fsa
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (48-57,1)
+1:  (-1,0)
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+
+print plus fsa done
+print determinize fsa
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (48-57,1)
+1:  (48-57,1)
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+
+print determinize fsa done
+print minimize fsa
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (48-57,1)
+1:  (48-57,1)
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+
+print minimize fsa done
+compile, determinize, minimize done, size(call.t::number) = 2
+call.t<====================== number compiled done. elapse 0
+call.t======================> main
+stmt: main, expr:Concat(31-44), depth:0
+Compiler visit ConcatExpr
+stmt: main, expr:Collapse(37-44), depth:1
+Compiler visit CollapseExpr
+print CollapseExpr fsa
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (3114112,1)
+1: 
+
+====== FSA Associated Expr of each state
+0:  Collapse^(37-44))
+1:  Collapse$(37-44))
+
+print CollapseExpr fsa done
+stmt: main, expr:Literal(31-36), depth:1
+Compiler visit LiteralExpr
+print LiteralExpr fsa
+====== FSA Automaton
+start: 0
+finals: 3
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3: 
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3: 
+
+print LiteralExpr fsa done
+print concat fsa
+====== FSA Automaton                                        // Hh0 concat无脑合并
+start: 0
+finals: 5
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (-1,4)
+4:  (3114112,5)
+5: 
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3: 
+4:  Collapse^(37-44))
+5:  Collapse$(37-44))
+
+print concat fsa done
+print determinize fsa
+====== FSA Automaton
+start: 0
+finals: 4
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (3114112,4)
+4: 
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3:  Collapse^(37-44))
+4:  Collapse$(37-44))
+
+print determinize fsa done
+print minimize fsa
+====== FSA Automaton
+start: 0
+finals: 4
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (3114112,4)
+4: 
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3:  Collapse^(37-44))
+4:  Collapse$(37-44))
+
+print minimize fsa done
+compile, determinize, minimize done, size(call.t::main) = 5
+call.t<====================== main compiled done. elapse 0
+Compiling exporting DefineStmt (coalescing referenced CallExpr/CollapseExpr)
+Exporting main
+Construct automato with all referenced CollapseExpr's DefineStmt
+Allocate 0 to main
+---------------------->
+====== FSA Automaton
+start: 0
+finals: 4
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (3114112,4)
+4: 
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3:  Collapse^(37-44))
+4:  Collapse$(37-44))
+
+<----------------------
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+==========> begin foreach anno to find collapse/callexpr
+found collapse, allocate
+Allocate 5 to number
+---------------------->
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (48-57,1)
+1:  (48-57,1)
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+
+<----------------------
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+after allocate, print adj---------------------->
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (3114112,4)
+4: 
+5:  (48-57,6)
+6:  (48-57,6)
+after allocate, sorted_emplaced, print adj---------------------->
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (-1,5) (3114112,4)                                                  // Hh1 添加空跳转指向 引用处
+4: 
+5:  (48-57,6)
+6:  (48-57,6)
+stmt: number already in stmt2offset
+<========== begin foreach End anno to find collapse/callexpr
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+ of states: 7
+last allocate done---------------------->
+====== FSA Automaton
+start: 0
+finals: 4
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (-1,5)
+4: 
+5:  (48-57,6)
+6:  (-1,4) (48-57,6)                                                    // Hh2 移除原始collapse
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3:  Collapse^(37-44))
+4:  Collapse$(37-44))
+5: 
+6: 
+
+last allocate done<----------------------
+Determinize
+print determinize fsa
+====== FSA Automaton
+start: 0
+finals: 4
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (48-57,4)
+4:  (48-57,4)
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3:  Collapse^(37-44))
+4:  Collapse$(37-44))
+
+print determinize fsa done
+last determinize done---------------------->
+====== FSA Automaton
+start: 0
+finals: 4
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (48-57,4)
+4:  (48-57,4)
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3:  Collapse^(37-44))
+4:  Collapse$(37-44))
+
+last determinize done<----------------------
+ of states: 5
+Minimize
+print minimize fsa
+====== FSA Automaton
+start: 0
+finals: 4
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (48-57,4)
+4:  (48-57,4)
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3:  Collapse^(37-44))
+4:  Collapse$(37-44))
+
+print minimize fsa done
+ of states: 5
+CallExprRemoving action/CallExpr labels====== FSA Automaton
+start: 0
+finals: 4
+edges:
+0:  (105,1)
+1:  (100,2)
+2:  (58,3)
+3:  (48-57,4)
+4:  (48-57,4)
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+2: 
+3:  Collapse^(37-44))
+4:  Collapse$(37-44))
+

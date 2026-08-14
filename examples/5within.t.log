@@ -1,0 +1,225 @@
+Processing import & def
+
+Processing use
+
+====== Module
+filename: within.t
+qualified imports:
+unqualified imports:
+defined action:
+defined:
+    main
+
+====== Tree
+filename: within.t
+DefineStmt export
+  main
+  @leaving
+    0
+    InlineAction
+       puts("leave 整句"); 
+  ConcatExpr
+    @leaving
+      0
+      InlineAction
+         puts("leave x"); 
+      0
+      InlineAction
+         puts("leave 内层括号"); 
+    LiteralExpr
+      x
+    LiteralExpr
+      y
+EmptyStmt
+
+====== Topological sorting
+
+====== Embed size: 1
+count(within.t::main) = 1
+
+====== Compiling DefineStmt
+within.t======================> main
+stmt: main, expr:Concat(98-166), depth:0
+Compiler visit ConcatExpr
+stmt: main, expr:Literal(163-166), depth:1
+Compiler visit LiteralExpr
+print LiteralExpr fsa
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (121,1)
+1: 
+
+====== FSA Associated Expr of each state
+0: 
+1: 
+
+print LiteralExpr fsa done
+stmt: main, expr:Literal(100-103), depth:1
+Compiler visit LiteralExpr
+print LiteralExpr fsa
+====== FSA Automaton
+start: 0
+finals: 1
+edges:
+0:  (120,1)
+1: 
+
+====== FSA Associated Expr of each state
+0:  Literal^(100-103),%2)
+1:  Literal$(100-103),%2)
+
+print LiteralExpr fsa done
+print concat fsa                                    ------> ( ( 'x' % { puts("leave x"); } ) % { puts("leave 内层括号"); } 'y') 这个concat代表最外层的()
+====== FSA Automaton
+start: 0
+finals: 3
+edges:
+0:  (120,1)
+1:  (-1,2)
+2:  (121,3)
+3: 
+
+====== FSA Associated Expr of each state            ------> 合并后有四个状态 那么assoc中就会产生四个新元素  
+                                                    ------> 这样做是合理的: 因为这个action的作用域是这个大括号 所以大括号里的所有状态均关联(assoc)上这个表达式
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat.(98-166),%1)
+3:  Concat$(98-166),%1)
+
+print concat fsa done
+print determinize fsa
+====== FSA Automaton
+start: 0
+finals: 2
+edges:
+0:  (120,1)
+1:  (121,2)
+2: 
+
+====== FSA Associated Expr of each state            ------> 合并
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat$(98-166),%1)
+
+print determinize fsa done
+print minimize fsa
+====== FSA Automaton
+start: 0
+finals: 2
+edges:
+0:  (120,1)
+1:  (121,2)
+2: 
+
+====== FSA Associated Expr of each state
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat$(98-166),%1)
+
+print minimize fsa done
+compile, determinize, minimize done, size(within.t::main) = 3
+within.t<====================== main compiled done. elapse 0
+Compiling exporting DefineStmt (coalescing referenced CallExpr/CollapseExpr)
+Exporting main
+Construct automato with all referenced CollapseExpr's DefineStmt
+Allocate 0 to main
+---------------------->
+====== FSA Automaton
+start: 0
+finals: 2
+edges:
+0:  (120,1)
+1:  (121,2)
+2: 
+
+====== FSA Associated Expr of each state
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat$(98-166),%1)
+
+<----------------------
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+==========> begin foreach anno to find collapse/callexpr
+<========== begin foreach End anno to find collapse/callexpr
+ of states: 3
+last allocate done---------------------->
+====== FSA Automaton
+start: 0
+finals: 2
+edges:
+0:  (120,1)
+1:  (121,2)
+2: 
+
+====== FSA Associated Expr of each state
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat$(98-166),%1)
+
+last allocate done<----------------------
+Determinize
+print determinize fsa
+====== FSA Automaton
+start: 0
+finals: 2
+edges:
+0:  (120,1)
+1:  (121,2)
+2: 
+
+====== FSA Associated Expr of each state
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat$(98-166),%1)
+
+print determinize fsa done
+last determinize done---------------------->
+====== FSA Automaton
+start: 0
+finals: 2
+edges:
+0:  (120,1)
+1:  (121,2)
+2: 
+
+====== FSA Associated Expr of each state
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat$(98-166),%1)
+
+last determinize done<----------------------
+ of states: 3
+Minimize
+print minimize fsa
+====== FSA Automaton
+start: 0
+finals: 2
+edges:
+0:  (120,1)
+1:  (121,2)
+2: 
+
+====== FSA Associated Expr of each state
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat$(98-166),%1)
+
+print minimize fsa done
+ of states: 3
+CallExprRemoving action/CallExpr labels====== FSA Automaton
+start: 0
+finals: 2
+edges:
+0:  (120,1)
+1:  (121,2)
+2: 
+
+====== FSA Associated Expr of each state
+0:  Concat^(98-166),%1) Literal^(100-103),%2)
+1:  Concat.(98-166),%1) Literal$(100-103),%2)
+2:  Concat$(98-166),%1)
