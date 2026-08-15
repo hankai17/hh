@@ -52,6 +52,8 @@ extern long AB;
     for (decltype(e) i = (e); --i >= (s);)
 
 
+//#define DEBUG_FSA 1
+//#define DEBUG_COMP 1
 
 void output_error(bool use_err, const char *format, va_list ap);
 void err_msg(const char *format, ...);

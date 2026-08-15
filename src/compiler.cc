@@ -11,8 +11,6 @@
 #include <cassert>
 #include <climits>
 
-#define DEBUG_COMP 1
-
 std::unordered_map<DefineStmt*, FsaAnno> compiled;
 
 static std::unordered_map<
@@ -347,6 +345,7 @@ void generate_transitions(DefineStmt *stmt) {
         }
         return std::string();
     };
+/*
 #define D(S)                                                                    \
     if (auto t = dynamic_cast<InlineAction*>(action.first)) {                   \
         if (from == to - 1) {                                                   \
@@ -364,6 +363,7 @@ void generate_transitions(DefineStmt *stmt) {
                 u, from, to - 1, v, t->define_stmt->code.c_str());              \
         }                                                                       \
     }
+*/
 
     fprintf(output, "long hh_%s_transit(std::vector<long> &ret_stack, long u, long c)\n", stmt->lhs.c_str());
     if (stmt->export_params.size()) {
@@ -531,7 +531,8 @@ static void print_adj(std::vector<std::vector<Edge>> &adj) {
 #endif
 
 bool compile_export(DefineStmt *stmt) {                                // 展开所有 & 引用（CollapseExpr） 把被引用的自动机状态合并进来
-    printf("Exporting %s\n", stmt->lhs.c_str());                        //  用 ε 转移连接引用点 最终构造一个完整的、不依赖其他定义的状态机
+    printf("Exporting: %s\n", stmt->lhs.c_str());                        //  用 ε 转移连接引用点 最终构造一个完整的、不依赖其他定义的状态机
+    time_t start = time(NULL);
     FsaAnno &anno = compiled[stmt];                                     //  注意这里只修改 anno 不会改变 stmt 语法树
 
     printf("Construct automato with all referenced CollapseExpr's DefineStmt\n");
@@ -547,7 +548,9 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
 
     std::function<void(DefineStmt*)> allocate = [&] (DefineStmt *stmt) {
         if (stmt2offset.count(stmt))  {
+#ifdef DEBUG_COMP
             printf("stmt: %s already in stmt2offset\n", stmt->lhs.c_str());
+#endif
             return;
         }
         printf("Allocate %ld to %s\n", allo, stmt->lhs.c_str());
@@ -577,15 +580,21 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         }
         assoc.insert(assoc.end(), ALL(anno.assoc));
         FOR (i, base, base + anno.fsa.n()) {
+#ifdef DEBUG_COMP
             printf("==========> begin foreach anno to find collapse/callexpr\n");
+#endif
             for (auto aa : assoc[i]) {
                 if (has_start(aa.second)) {
                     if (auto e = dynamic_cast<CallExpr *>(aa.first)) {
+#ifdef DEBUG_COMP
                         printf("found callexpr, allocate\n");
+#endif
                         DefineStmt *v = e->define_stmt;
                         allocate(v);                                                // callexpr不会 像引用那样"扩展"
                     } else if (auto e = dynamic_cast<CollapseExpr *>(aa.first)) {   // 这个状态有引用转移
+#ifdef DEBUG_COMP
                         printf("found collapse, allocate\n");
+#endif
                         DefineStmt *v = e->define_stmt;                             // v是e这个表达式所引用的句子
                         allocate(v);
 #ifdef DEBUG_COMP
@@ -626,14 +635,17 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
                 }
             }
             adj[i].resize(j);                                                       // 删除老的引用转移边
+#ifdef DEBUG_COMP
             printf("<========== begin foreach End anno to find collapse/callexpr\n");
+#endif
         }
     };
     allocate(stmt);
     anno.fsa.adj = std::move(adj);
     anno.assoc = std::move(assoc);
     anno.deterministic = false;
-    printf(" of states: %ld\n", anno.fsa.n());
+    printf(" of states: %ld, elapse: %ld\n",
+            anno.fsa.n(), time(NULL) - start);
 
 #ifdef DEBUG_COMP
     printf("last allocate done---------------------->\n");
@@ -645,7 +657,8 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     if (0 && !stmt->intact) {
         printf("Constructing substring grammar\n");
         anno.substring_grammar();
-        printf(" of states: %ld\n", anno.fsa.n());
+        printf(" of states: %ld, elapse: %ld\n",
+                anno.fsa.n(), time(NULL) - start);
     }
 
     printf("Determinize\n");
@@ -680,7 +693,8 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         it.second = ~ it.second;
         start2stmt[it.second] = it.first;
     }
-    printf(" of states: %ld\n", anno.fsa.n());
+    printf(" of states: %ld, elapse: %ld\n",
+            anno.fsa.n(), time(NULL) - start);
 
     printf("Minimize\n");
     map0.clear();
@@ -702,7 +716,8 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     for (auto & it : stmt2start) {
         start2stmt[it.second] = it.first;
     }
-    printf(" of states: %ld\n", anno.fsa.n());
+    printf(" of states: %ld, elapse: %ld\n",
+            anno.fsa.n(), time(NULL) - start);
      
     if (0) {
         printf("Keep accessible states\n");
@@ -782,7 +797,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         }
     }
 
-    printf("Removing action/CallExpr labels");
+    printf("Removing action/CallExpr labels\n");
     REP (i, anno.fsa.n()) {
         long j = anno.fsa.adj[i].size();
         while (j && action_label_base < anno.fsa.adj[i][j - 1].first.second) {
@@ -799,6 +814,8 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     //    print_fsa(anno.fsa);
     //    print_assoc(anno);
     //}
+    printf("Exporting: %s done. elapse: %ld\n\n",
+            stmt->lhs.c_str(), time(NULL) - start);
     return true;
 }
 
