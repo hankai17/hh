@@ -401,9 +401,9 @@ void generate_transitions(DefineStmt *stmt) {
                     std::vector<std::pair<long, long>>,     // 到达目标态 所有边集合: <from, to>
                     std::vector<std::pair<Action*, long>>
             >
-        > v2case;                                           // 即合并当前态u下的 所有相同的目标态v 及(当前态u)到目标态v的所有边(pair.first) 及 (当前态u)到目标态v的所有action(pair.second)
-                                                            //  eg: 3(u) --a,c--> 5(v)  // <a,b> <c,d>存放到 pair.first中
-                                                            //      从3态到5态的 涉及到的action变化 放到 pair.second中 eg: action1消失 action2出现 则action1/2都方到pair.second里
+        > v2case;                                           // 即合并当前态u下的 所有相同的目标态v (同源同目) 及(当前态u)到目标态v的所有边(pair.first) 及 (当前态u)到目标态v的所有action(pair.second)
+                                                            //  eg: 3(u) --a,c--> 5(v)  // <a,b(a+1)> <c,d(c+1)>存放到 pair.first中
+                                                            //      从3态到5态的 涉及到的(3态5态下 所有表达式相关的)action变化 放到 pair.second中 eg: action1消失 action2出现 则action1/2都方到pair.second里
         for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end();) {
             long from = it->first.first;
             long to = it->first.second;
@@ -764,7 +764,7 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
     stmt2final[stmt] = sub_final;
     auto &call_addr = stmt2call_addr[stmt];
     call_addr.assign(anno.fsa.n(), std::make_pair(-1L, -1L));
-    printf("CallExpr");
+    printf("CallExpr\n");
     REP (i, anno.fsa.n()) {                                             // 构造这条含有call表达式的语句 的引用<1, 5>
         if (anno.fsa.has_call(i)) {
             if (anno.fsa.adj[i].size() != 1 ||
@@ -810,10 +810,11 @@ bool compile_export(DefineStmt *stmt) {                                // 展开
         anno.fsa.adj[i].resize(j);
     }
 
-    //if (1) {
-    //    print_fsa(anno.fsa);
-    //    print_assoc(anno);
-    //}
+#ifdef DEBUG_COMP
+    printf("after compile_export:\n");
+    print_fsa(anno.fsa);
+    print_assoc(anno);
+#endif
     printf("Exporting: %s done. elapse: %ld\n\n",
             stmt->lhs.c_str(), time(NULL) - start);
     return true;

@@ -1,0 +1,221 @@
+import "sql_lexer.t"
+
+ws = [ \t\r\n]+
+
+opt_ws = [ \t\r\n]*
+
+fallback
+        = fallback_excluding_conflicts
+        | join_keyword
+        | RAISE_
+
+any_name = IDENTIFIER | fallback | STRING_LITERAL
+
+any_name_excluding_string = IDENTIFIER | fallback
+
+any_name_excluding_raise 
+                        : IDENTIFIER
+                        | fallback_excluding_conflicts
+                        | join_keyword
+                        | STRING_LITERAL
+
+schema_name = any_name
+
+table_name = any_name
+
+column_name = any_name
+
+column_alias = any_name
+
+column_name_excluding_string = any_name_excluding_string
+
+
+literal_value 
+            : NUMERIC_LITERAL
+            | STRING_LITERAL
+            | BLOB_LITERAL
+            | NULL_
+            | TRUE_
+            | FALSE_
+            | CURRENT_TIME_
+            | CURRENT_DATE_
+            | CURRENT_TIMESTAMP_
+
+expr_base 
+            : literal_value
+            | BIND_PARAMETER
+            | (schema_name DOT)? table_name DOT column_name
+            | column_name_excluding_string
+            | (NOT_? EXISTS_)? OPEN_PAR opt_ws !select_stmt opt_ws CLOSE_PAR
+            | !expr_recursive
+
+expr_unary = (MINUS | PLUS | TILDE)* opt_ws !expr_base
+
+expr_string = expr_unary (opt_ws (PIPE2 | JPTR | JPTR2) opt_ws expr_unary)*
+
+expr_multiplication = expr_string (opt_ws (STAR | DIV | MOD) opt_ws expr_string)*
+
+expr_addition = expr_multiplication (opt_ws (PLUS | MINUS) opt_ws expr_multiplication)*
+
+expr_bitwise = expr_addition (opt_ws (LT2 | GT2 | AMP | PIPE) opt_ws expr_addition)*
+
+expr_comparison = expr_bitwise (opt_ws (LT | LT_EQ | GT | GT_EQ) opt_ws expr_bitwise)*
+
+expr_list = expr_comparison (opt_ws ',' opt_ws expr_comparison)*
+
+expr_recursive = OPEN_PAR opt_ws expr_list opt_ws CLOSE_PAR
+
+
+expr = expr_or
+
+expr_or = expr_and (OR_ ws expr_and)*
+
+expr_and = expr_not (AND_ ws expr_not)*
+
+expr_not = (NOT_ ws)* expr_binary
+
+
+compare_operator 
+                : "="
+                | "=="
+                | "!="
+                | "<>"
+                | "<"
+                | "<="
+                | ">"
+                | ">="
+
+is_null_operator = (IS_ ws NULL_) | (IS_ ws NOT_ ws NULL_)
+
+between_operator = (NOT_ ws)? BETWEEN_ ws expr_comparison ws AND_ ws expr_comparison
+
+in_operator = (NOT_ ws)? IN_ ws '(' opt_ws expr_list? opt_ws ')'
+
+like_operator = (NOT_ ws)? LIKE_ ws expr_comparison
+
+//expr_binary = expr_comparison (opt_ws (compare_operator expr_comparison | is_null_operator | between_operator | in_operator | like_operator) opt_ws)*
+
+expr_binary 
+            : expr_comparison ws (
+            compare_operator expr_comparison
+            | is_null_operator
+            | between_operator
+            | in_operator
+            | like_operator)*
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+where_clause  = WHERE_ ws !expr
+
+table_or_subquery = IDENTIFIER | ('(' opt_ws !select_stmt opt_ws ')')
+
+join_clause = table_or_subquery
+
+from_clause = FROM_ ws join_clause
+
+result_column
+            : STAR
+            | table_name DOT STAR
+            | !expr (ws (AS_ ws)? column_alias)?
+
+export select_stmt = SELECT_ ws result_column (ws from_clause)? ( ws where_clause )?
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+join_keyword 
+    : CROSS_
+    | FULL_
+    | INDEXED_
+    | INNER_
+    | LEFT_
+    | NATURAL_
+    | OUTER_
+    | RIGHT_
+
+fallback_excluding_conflicts 
+    : ABORT_
+    | ACTION_
+    | AFTER_
+    | ALWAYS_
+    | ANALYZE_
+    | ASC_
+    | ATTACH_
+    | BEFORE_
+    | BEGIN_
+    | BY_
+    | CASCADE_
+    | CAST_
+    | COLUMN_
+    | CONFLICT_
+    | CURRENT_
+    | CURRENT_DATE_
+    | CURRENT_TIME_
+    | CURRENT_TIMESTAMP_
+    | DATABASE_
+    | DEFERRED_
+    | DESC_
+    | DETACH_
+    | DO_
+    | EACH_
+    | END_
+    | EXCEPT_
+    | EXCLUDE_
+    | EXCLUSIVE_
+    | EXPLAIN_
+    | FAIL_
+    | FALSE_
+    | FIRST_
+    | FOLLOWING_
+    | FOR_
+    | GENERATED_
+    | GLOB_
+    | GROUPS_
+    | IF_
+    | IGNORE_
+    | IMMEDIATE_
+    | INITIALLY_
+    | INSTEAD_
+    | INTERSECT_
+    | KEY_
+    | LAST_
+    | LIKE_
+    | MATCH_
+    | MATERIALIZED_
+    | NO_
+    | NULLS_
+    | OF_
+    | OFFSET_
+    | OTHERS_
+    | PARTITION_
+    | PLAN_
+    | PRAGMA_
+    | PRECEDING_
+    | QUERY_
+    | RANGE_
+    | RECURSIVE_
+    | REGEXP_
+    | REINDEX_
+    | RELEASE_
+    | RENAME_
+    | REPLACE_
+    | RESTRICT_
+    | ROLLBACK_
+    | ROW_
+    | ROWID_
+    | ROWS_
+    | SAVEPOINT_
+    | STORED_
+    | STRICT_
+    | TEMP_
+    | TEMPORARY_
+    | TIES_
+    | TRIGGER_
+    | TRUE_
+    | UNBOUNDED_
+    | UNION_
+    | VACUUM_
+    | VIEW_
+    | VIRTUAL_
+    | WITH_
+    | WITHIN_
+    | WITHOUT_
